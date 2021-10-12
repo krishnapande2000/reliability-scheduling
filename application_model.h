@@ -16,6 +16,8 @@ struct task{
 class DAG 
 {
 	map<task,vector<task>> edges;
+	map<int,task> id_task;
+	
 	double deadline;
 	// edges[task i]->task j, task k, task l. j,k,l depend on i
 	DAG();
