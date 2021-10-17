@@ -4,27 +4,42 @@ struct task{
 	int id;
 	double worst_case_time;
 	double priority;
+	vector<task*> predecessors;
+	vector<task*> successors;
 	bool recovery_assigned;
-	core core_Assigned;
-	double freq_Assigned;
+	int core_assigned;
+	double freq_assigned;
 
 	task(){
 		recovery_assigned = false;
 	}
 };
 
+struct edge{
+	task* src;
+	task* dest;
+
+	egde(){
+	}
+}
+
 class DAG 
 {
-	map<task,vector<task>> edges;
-	map<int,task> id_task;
-	
+	//use pointers or ids not the entire struct here:
+	//use id and define a global map for id->pointer
+	vector<task*> nodes;
+	vector<edge*> edges;
+
 	double deadline;
 	// edges[task i]->task j, task k, task l. j,k,l depend on i
 	DAG();
-	DAG(map<task,vector<task>> edges, double deadline);
+	DAG(vector<task*> nodes, vector<edge*> edges, double deadline);
+
+	//sort topologically
 
 	void setDeadline(double deadline);
-	void addDependency(task i, task j);
-	void removeDependency(task i,task j);
+	void addDependency(int i,int j);
+	void removeDependency(int i,int j);
+	void generateDAG(int no_of_tasks, int no_of_cores);
 
 };
