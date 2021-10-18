@@ -1,4 +1,5 @@
-#include <system_model.h>
+#include <bits/stdc++.h>
+using namespace std;
 
 struct task{
 	int id;
@@ -18,17 +19,15 @@ struct task{
 struct edge{
 	task* src;
 	task* dest;
-
-	egde(){
-	}
-}
+};
 
 class DAG 
 {
 	//use pointers or ids not the entire struct here:
 	//use id and define a global map for id->pointer
-	vector<task*> nodes;
-	vector<edge*> edges;
+	public:
+		vector<task*> nodes;
+		vector<edge*> edges;
 
 	double deadline;
 	// edges[task i]->task j, task k, task l. j,k,l depend on i
@@ -41,5 +40,6 @@ class DAG
 	void addDependency(int i,int j);
 	void removeDependency(int i,int j);
 	void generateDAG(int no_of_tasks, int no_of_cores);
+	void displayDAG();
 
 };
