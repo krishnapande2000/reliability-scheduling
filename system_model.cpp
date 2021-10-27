@@ -25,12 +25,12 @@ void Multicore::generateCores(int no_of_cores){
 
 	for(int i=0;i<no_of_cores;i++){
 		Core* newCore = new Core();
-		newCore->hardware_coefficient = generateRand1(30,10);
+		newCore->hardware_coefficient = 3;
 		newCore->aging_rate = generateRand1(45,5);
 		newCore->weibull_alpha = generateRand1(60,10);
-		newCore->Fmax = rand()%(300-100 + 1) + 100;
-		newCore->Fmin = rand()%((int)newCore->Fmax-100 + 1) + 100;
-		newCore->ro = generateRand1(54,3);
+		newCore->Fmax = 3e9;
+		newCore->Fmin = 1.5e9;
+		newCore->ro = 1e-6;
 		newCore->id = i;
 
 		cores.push_back(newCore);

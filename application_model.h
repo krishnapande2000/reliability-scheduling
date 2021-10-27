@@ -40,6 +40,7 @@ class DAG
 	void addDependency(int i,int j);
 	void removeDependency(int i,int j);
 	void generateDAG(int no_of_tasks, int no_of_cores);
+	void resetAssignment();
 	void displayDAG();
 
 };

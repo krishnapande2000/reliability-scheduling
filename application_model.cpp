@@ -79,6 +79,12 @@ void DAG::generateDAG(int no_of_tasks, int no_of_cores){
 
 	}
 
+void DAG::resetAssignment(){
+	for(auto l:nodes){
+		l->recovery_assigned = false;
+	}
+}
+
 void DAG::displayDAG(){
 	cout<<"Nodes == Tasks are as follows\n";
 

@@ -12,9 +12,13 @@ struct Core{
 	double Fmin;
 	double ro;
 
-	double slack;
+	double total_time;
 
 	vector<task*> tasks;
+
+	Core(){
+		total_time=0;
+	}
 };
 
 class Multicore{
