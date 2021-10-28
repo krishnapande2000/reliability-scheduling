@@ -46,7 +46,7 @@ void DAG::generateDAG(int no_of_tasks, int no_of_cores){
 
 		cout<<"generate dag started\n";
 
-		this->deadline = rand()%(300-200 + 1) + 200;
+		this->deadline = 0;
 
 		for(int i=0;i<no_of_tasks;i++){
 			task* newTask = new task();

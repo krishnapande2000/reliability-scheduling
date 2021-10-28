@@ -28,9 +28,9 @@ void Multicore::generateCores(int no_of_cores){
 		newCore->hardware_coefficient = 3;
 		newCore->aging_rate = generateRand1(45,5);
 		newCore->weibull_alpha = generateRand1(60,10);
-		newCore->Fmax = 3e9;
-		newCore->Fmin = 1.5e9;
-		newCore->ro = 1e-6;
+		newCore->Fmax = 0.99;
+		newCore->Fmin = 0.01;
+		newCore->ro = 1e-5;
 		newCore->id = i;
 
 		cores.push_back(newCore);
