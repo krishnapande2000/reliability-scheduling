@@ -6,53 +6,104 @@ int NO_OF_CORES = 2;
 
 int NO_OF_TASKS = 10;
 
+double DEADLINE = 0;
+
 Multicore* multicore;
 
 //**********calc start**************************************************************************************************88
 
-double taskRealibility(task* t, Core* c){
+double taskReliability(task* t, Core* c){
 	double ro = c->ro;
 	double w = c->hardware_coefficient;
 	double Fmin = c->Fmin;
+	double Fmax = c->Fmax;
+
 	double wc = t->worst_case_time;
 	double freq = t->freq_assigned;
 
-	double Fmax = c->Fmax;
-
 	double rf = ro*(pow(10,(w*(1-freq))/(1-Fmin)));
-
 	double Ri = exp((-1)*(rf*wc)/freq);
 
-	cout<<" task id "<<t->id<<" Ri : "<<Ri<<" \n";
+	//cout<<" task id "<<t->id<<" Ri : "<<Ri<<" \n";
 
 	return Ri;
 }
 
 double taskRecReliability(task* t, Core* c){
-	double Ri = taskRealibility(t,c);
-
+	double Ri = taskReliability(t,c);
 	double Rreci = 1.0 - (1.0-Ri)*(1.0-Ri);
-
-	// cout<<" Rreci : "<<Rreci<<" \n";
-
 	return Rreci;
+}
+
+// schedule: vector with task pointers in a sorted order as per priority
+// hasExecuted : bit mask to represent fail/success for a task
+// in: the bit index to be fixed in this function call
+// i: the index of task in schedule for which we are calculating the Prec
+void PrecHelper(Core* core, int hasExecuted,int in,int i,double* PMil){
+	if(in==i){
+		//calculate PMil
+		double slack = DEADLINE - core->total_time;
+
+		for(int j=0;j<i;j++){
+			if(hasExecuted & (1 << (j - 1)) == 0){
+				double time_rec = core->tasks[j]->worst_case_time/core->tasks[j]->freq_assigned;
+				if(slack >= time_rec) slack-=time_rec;
+			}
+		}
+		double time_rec = core->tasks[i]->worst_case_time/core->tasks[i]->freq_assigned;
+		if(slack > time_rec){
+
+			double prob_of_mode=1;
+			for(int j=0;j<i;j++){
+
+				double ri = taskReliability(core->tasks[j],core);
+				if(hasExecuted & (1 << (j - 1)) == 0){
+					prob_of_mode*=(1-ri);
+				}
+				else prob_of_mode*=(ri);
+			}
+
+			*PMil+=prob_of_mode;
+		}
+
+		return;
+	}
+
+	//two cases for bit mask : in'th task fails or succeeds:
+	PrecHelper(core,hasExecuted,in+1,i,PMil);
+	PrecHelper(core,hasExecuted|1<<i-1,in+1,i,PMil);
+}
+
+double taskPreci(Core* c,int i){
+	double freq_assigned = c->tasks[i]->freq_assigned;
+	c->tasks[i]->freq_assigned = 0.99; //fmax
+	double RiFmax = taskReliability(c->tasks[i],c);
+	c->tasks[i]->freq_assigned = freq_assigned; //restoring old value;
+
+	double pMil = 0;
+	double *PMil = &pMil;
+
+	*PMil = 0;
+	PrecHelper(c,0,0,i,PMil);
+
+	return RiFmax*(*PMil);
 }
 
 double systemReliability(Multicore* multicore){
 	double Rsys = 1;
 
 	for(auto core : multicore->cores){
+		int i=0;
 		for(auto task : core->tasks){
 
-			double Ri = 1;
-			if(task->recovery_assigned){
-				Ri = taskRecReliability(task,core);
-			}
-			else{
-				Ri = taskRealibility(task,core);
-			}
+			double Ri = taskReliability(task,core);
+			double Preci = taskPreci(core,i);
+			double Rreci = 1 - (1-Ri)*(1-Preci);
 
-			Rsys = Rsys*Ri;
+			cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<" \n";
+
+			Rsys*=Rreci;
+			i++;
 		}
 	}
 
@@ -147,7 +198,7 @@ bool comp_greedyReliability(task* i,task* j){
 	if(jToi) return false;
 	if(iToj) return true;
 
-	return taskRealibility(i,multicore->cores[i->core_assigned]) > taskRealibility(j,multicore->cores[j->core_assigned]);
+	return taskReliability(i,multicore->cores[i->core_assigned]) > taskReliability(j,multicore->cores[j->core_assigned]);
 }
 
 void greedyReliabilityAlgo(Multicore* multicore, double deadline){
@@ -173,7 +224,39 @@ void greedyReliabilityAlgo(Multicore* multicore, double deadline){
 
 }
 
-void paperAlgo(){}
+//paper 4 algo :
+bool comp_greedyTime(task* i,task* j){
+	bool iToj = false, jToi = false;
+	for(auto l:i->predecessors){
+		if(l==j) jToi = true;
+	}
+	for(auto l:j->predecessors){
+		if(l==i) iToj = true;
+	}
+
+	if(jToi) return false;
+	if(iToj) return true;
+
+	return i->worst_case_time/i->freq_assigned < j->worst_case_time/j->freq_assigned;
+}
+
+void greedyTimeAlgo(Multicore* multicore, double deadline){
+	//assign priority as per the dependency and reliability
+
+	for(auto core : multicore->cores){
+		//tasks vector to be sorted
+		sort(core->tasks.begin(),core->tasks.end(),comp_greedyTime);
+		double slack = deadline - core->total_time;
+
+
+		for(auto l:core->tasks){
+			if(l->worst_case_time > slack) break;
+			slack-=l->worst_case_time;
+			l->recovery_assigned = true;
+		}
+	}
+
+}
 
 void simulatedAnnealingAlgo(){}
 
@@ -225,8 +308,6 @@ int main(){
 	}
 
 
-
-	// int n = 10;
 	dag->displayDAG();
 
 	//applying algo to assign frequencies to tasks
@@ -240,29 +321,29 @@ int main(){
 		max_time_taken = max(max_time_taken,multicore->cores[core_id]->total_time);
 	}
 	dag->deadline = 1.5*(max_time_taken);
+	DEADLINE = dag->deadline;
 
 
-
-	//assign revoeries :
+	//applying algo to assign recoveries :
 
 
 	// cout<<"applying a randomAlgo to give recoveries to some tasks\n";
 	// randomAlgo(dag);
-
-
 	// double rsys = systemReliability(multicore);
 	// cout<<"System reliability : "<<rsys<<" \n";
 	// cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
-
 	// cout<<"MTTFsys is as:\n"<<systemLifetimeReliability(multicore);
-
 	// cout<<"****************\n";
+	// dag->resetAssignment();
+
 
 	cout<<"applying a GREEDY Algo to give recoveries to some tasks\n";
-
 	greedyReliabilityAlgo(multicore,dag->deadline);
 	cout<<"System reliability : "<<systemReliability(multicore)<<" \n";
 	cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
+	// cout<<"MTTFsys is as:\n"<<systemLifetimeReliability(multicore);
+	// cout<<"****************\n";
+	// dag->resetAssignment();
 
 
 	//calculating reliability
