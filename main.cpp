@@ -2,9 +2,9 @@
 #include "system_model.h"
 using namespace std;
 
-int NO_OF_CORES = 2;
+int NO_OF_CORES = 4;
 
-int NO_OF_TASKS = 10;
+int NO_OF_TASKS = 50;
 
 double DEADLINE = 0;
 
@@ -45,25 +45,26 @@ void PrecHelper(Core* core, int hasExecuted,int in,int i,double* PMil){
 		double slack = DEADLINE - core->total_time;
 
 		for(int j=0;j<i;j++){
-			if(hasExecuted & (1 << (j - 1)) == 0){
+			if((hasExecuted & (1 <<j)) == 0){
 				double time_rec = core->tasks[j]->worst_case_time/core->tasks[j]->freq_assigned;
 				if(slack >= time_rec) slack-=time_rec;
 			}
 		}
 		double time_rec = core->tasks[i]->worst_case_time/core->tasks[i]->freq_assigned;
-		if(slack > time_rec){
+		if(slack >= time_rec){
 
 			double prob_of_mode=1;
 			for(int j=0;j<i;j++){
 
 				double ri = taskReliability(core->tasks[j],core);
-				if(hasExecuted & (1 << (j - 1)) == 0){
+				if((hasExecuted & (1 << j)) == 0){
 					prob_of_mode*=(1-ri);
 				}
 				else prob_of_mode*=(ri);
 			}
 
 			*PMil+=prob_of_mode;
+			//cout<<"prob_of_mode : "<<prob_of_mode<<" ";
 		}
 
 		return;
@@ -71,12 +72,12 @@ void PrecHelper(Core* core, int hasExecuted,int in,int i,double* PMil){
 
 	//two cases for bit mask : in'th task fails or succeeds:
 	PrecHelper(core,hasExecuted,in+1,i,PMil);
-	PrecHelper(core,hasExecuted|1<<i-1,in+1,i,PMil);
+	PrecHelper(core,hasExecuted|(1 << in) ,in+1,i,PMil);
 }
 
 double taskPreci(Core* c,int i){
 	double freq_assigned = c->tasks[i]->freq_assigned;
-	c->tasks[i]->freq_assigned = 0.99; //fmax
+	c->tasks[i]->freq_assigned = 0.9; //fmax
 	double RiFmax = taskReliability(c->tasks[i],c);
 	c->tasks[i]->freq_assigned = freq_assigned; //restoring old value;
 
@@ -86,6 +87,7 @@ double taskPreci(Core* c,int i){
 	*PMil = 0;
 	PrecHelper(c,0,0,i,PMil);
 
+	cout<<" Task id "<<c->tasks[i]->id<<" Pmil: "<<*PMil<<" * RiFmax : "<<RiFmax<<"\n";
 	return RiFmax*(*PMil);
 }
 
@@ -98,11 +100,13 @@ double systemReliability(Multicore* multicore){
 
 			double Ri = taskReliability(task,core);
 			double Preci = taskPreci(core,i);
-			double Rreci = 1 - (1-Ri)*(1-Preci);
+			double Rreci = 1.0 - (1.0-Ri)*(1.0-Preci);
 
-			cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<" \n";
 
 			Rsys*=Rreci;
+
+			cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<"Rsys : "<<Rsys<<" \n";
+
 			i++;
 		}
 	}
@@ -320,31 +324,37 @@ int main(){
 		multicore->cores[core_id]->total_time+=dag->nodes[i]->worst_case_time/dag->nodes[i]->freq_assigned; //so we add time taken actually.
 		max_time_taken = max(max_time_taken,multicore->cores[core_id]->total_time);
 	}
-	dag->deadline = 1.5*(max_time_taken);
+	dag->deadline = 1.2*(max_time_taken);
 	DEADLINE = dag->deadline;
 
 
 	//applying algo to assign recoveries :
 
 
-	// cout<<"applying a randomAlgo to give recoveries to some tasks\n";
-	// randomAlgo(dag);
-	// double rsys = systemReliability(multicore);
-	// cout<<"System reliability : "<<rsys<<" \n";
-	// cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
-	// cout<<"MTTFsys is as:\n"<<systemLifetimeReliability(multicore);
-	// cout<<"****************\n";
-	// dag->resetAssignment();
+	cout<<"applying a randomAlgo to give recoveries to some tasks\n";
+	randomAlgo(multicore,dag->deadline);
+	double rsys = systemReliability(multicore);
+	cout<<"System reliability : "<<rsys<<" \n";
+	cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
+	cout<<"MTTFsys is as:\n"<<systemLifetimeReliability(multicore);
+	cout<<"****************\n";
+	dag->resetAssignment();
 
 
 	cout<<"applying a GREEDY Algo to give recoveries to some tasks\n";
 	greedyReliabilityAlgo(multicore,dag->deadline);
-	cout<<"System reliability : "<<systemReliability(multicore)<<" \n";
+	rsys = systemReliability(multicore);
+	cout<<"System reliability : "<<rsys<<" \n";
 	cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
 	// cout<<"MTTFsys is as:\n"<<systemLifetimeReliability(multicore);
 	// cout<<"****************\n";
-	// dag->resetAssignment();
+    dag->resetAssignment();
 
+	cout<<"applying a GREEDY TIME Algo to give recoveries to some tasks\n";
+	greedyTimeAlgo(multicore,dag->deadline);
+	rsys = systemReliability(multicore);
+	cout<<"System reliability : "<<rsys<<" \n";
+	cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
 
 	//calculating reliability
 

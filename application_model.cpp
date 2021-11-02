@@ -51,7 +51,7 @@ void DAG::generateDAG(int no_of_tasks, int no_of_cores){
 		for(int i=0;i<no_of_tasks;i++){
 			task* newTask = new task();
 			newTask->id = i;
-			newTask->worst_case_time = rand()%(10-7 + 1) + 7;
+			newTask->worst_case_time = rand()%(100-10 + 1) + 10;
 			newTask->core_assigned = rand()%no_of_cores;
 
 			nodes.push_back(newTask);
