@@ -85,6 +85,51 @@ void DAG::resetAssignment(){
 	}
 }
 
+void DAG::inputDAG(string filepath, int no_of_cores){
+	//read from file and create a DAG 
+	// have filepath as input
+
+	cout<<"reading DAG from file "<<filepath<<"\n";
+
+	fstream fin(filepath);
+	int no_of_jobs;
+	fin>>no_of_jobs;
+
+	for(int i=0;i<no_of_jobs;i++){
+
+		task* newTask = new task();
+		newTask->id = i;
+		newTask->worst_case_time = rand()%(100-10 + 1) + 10;
+		newTask->core_assigned = rand()%no_of_cores;
+
+		nodes.push_back(newTask);
+	}
+
+	for(int i=0;i<no_of_jobs;i++){
+		int id;
+		double runtime;
+		fin >> id >> runtime;
+		nodes[id]->worst_case_time = runtime;
+	}
+
+	int src,dst;
+	while(fin >> src >> dst){
+
+		nodes[dst]->predecessors.push_back(nodes[src]);
+		nodes[src]->successors.push_back(nodes[dst]);
+
+		edge* newEdge = new edge();
+		newEdge->src = nodes[src];
+		newEdge->dest = nodes[dst];
+
+		edges.push_back(newEdge);
+	}
+
+	cout<<"reading done DAG generated\n";
+
+
+}
+
 void DAG::displayDAG(){
 	cout<<"Nodes == Tasks are as follows\n";
 

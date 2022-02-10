@@ -42,5 +42,6 @@ class DAG
 	void generateDAG(int no_of_tasks, int no_of_cores);
 	void resetAssignment();
 	void displayDAG();
+	void inputDAG(string filepath, int no_of_cores);
 
 };
