@@ -12,6 +12,8 @@ double LIFETIME_THRESHOLD = 40;
 
 Multicore* multicore;
 
+DAG* dag;
+
 //**********calc start**************************************************************************************************88
 
 double taskReliability(task* t, Core* c){
@@ -35,6 +37,22 @@ double taskRecReliability(task* t, Core* c){
 	double Ri = taskReliability(t,c);
 	double Rreci = 1.0 - (1.0-Ri)*(1.0-Ri);
 	return Rreci;
+}
+
+double taskReliability_dynamic(task* t, Core* t, double execution_time){
+	double ro = c->ro;
+	double w = c->hardware_coefficient;
+	double Fmin = c->Fmin;
+	double Fmax = c->Fmax;
+
+	double freq = t->freq_assigned;
+
+	double rf = ro*(pow(10,(w*(1-freq))/(1-Fmin)));
+	double Ri = exp((-1)*(rf*execution_time));
+
+	//cout<<" task id "<<t->id<<" Ri : "<<Ri<<" \n";
+
+	return Ri;
 }
 
 // schedule: vector with task pointers in a sorted order as per priority
@@ -101,13 +119,15 @@ double systemReliability(Multicore* multicore){
 		for(auto task : core->tasks){
 
 			double Ri = taskReliability(task,core);
-			double Preci = taskPreci(core,i);
-			double Rreci = 1.0 - (1.0-Ri)*(1.0-Preci);
-
+			// double Preci = taskPreci(core,i);
+			double Rreci = Ri;
+			if(task->recovery_assigned){
+				Rreci = 1.0 - (1.0-Ri)*(1.0-Ri);
+			}
 
 			Rsys*=Rreci;
 
-			cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<"Rsys : "<<Rsys<<" \n";
+			// cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<"Rsys : "<<Rsys<<" \n";
 
 			i++;
 		}
@@ -316,6 +336,23 @@ bool isFeasible(task* i, task* j){
 
 // }
 
+int no_of_recoveries(){
+	int low = 0;
+	int high = dag->nodes.size();
+	int mid;
+	while(high>low)
+	{
+		mid = low + (high - low)/2;
+		if(static_schedule()){
+			low = mid;
+		}
+		else{
+			high = mid - 1;
+		}
+	}
+	return mid;
+}
+
 //**********recovery assigning algos end**************************************************************************************************88
  
 //**********constraint checks**************************************************************************************************88
@@ -421,7 +458,7 @@ int main(){
 	files.push_back("./BenchmarkDagsTXT/Montage_100.txt");
 
 	for(auto filepath : files){
-		DAG* dag = new DAG();
+		dag = new DAG();
 		dag->inputDAG(filepath,NO_OF_CORES);
 
 		multicore = new Multicore();
