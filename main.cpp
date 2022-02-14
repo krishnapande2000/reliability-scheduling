@@ -277,16 +277,23 @@ int numberOfRecoveriesStatic(DAG* dag, int start, int end){
 bool compWorstCaseTime(task* i,task* j){
 	return i->worst_case_time < j->worst_case_time;
 }
-
+bool compEndTime(task* i,task* j){
+	return i->end_time < j->end_time;
+}
+bool compVexitDistance(task* i,task* j){
+	return i->vexit_dist < j->vexit_dist;
+}
 
 DAG* getNewDAG(DAG* dag, int number_of_recoveries){
-	DAG* new_dag = new DAG(dag);
+	DAG* new_dag = new DAG();
+	*new_dag = *dag;
 	//TODO(krishnahere): check ^
 	sort(new_dag->nodes.begin(), new_dag->nodes.end(),compWorstCaseTime);
 	for (int i = 0; i < number_of_recoveries; i++){
 		task* node = nodes[i];
 		node->recovery_assigned=true;
-		task* new_node = new task(node); //successor - prede.. done
+		task* new_node = new task(); //successor - prede.. done
+		*new_node = *node;
 		//TODO(krishnahere): check ^
 		new_dag->nodes.push_back(new_node);
 		for(auto pred : node->predecessors){
@@ -302,9 +309,9 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 bool canScheduleStatic(DAG* node_graph){
 	//TODO(krishnahere): DO all.
 	
-	vector<Core> free_cores;
-	priority_queue<task*> processing_queue;
-	priority_queue<task*> ready_queue;
+	vector<Core*> free_cores;
+	priority_queue<task*, vector<task*>,compEndTime> processing_queue;
+	priority_queue<task*, vector<task*>, compVexitDistance> ready_queue;
 
 
 }

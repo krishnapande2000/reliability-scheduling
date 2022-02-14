@@ -78,6 +78,7 @@ struct task{
 	double execution_time;
 	double dynamic_ready_time;
 	double dynamic_process_start_time;
+	int vexit_dist;
 
 	task(){
 		recovery_assigned = false;
