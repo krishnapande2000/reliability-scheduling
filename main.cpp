@@ -284,6 +284,66 @@ bool compVexitDistance(task* i,task* j){
 	return i->vexit_dist < j->vexit_dist;
 }
 
+void topologicalSortUtil(DAG* dag,int v, bool visited[],stack<int>& stack)
+{
+	  // Mark the current node as visited
+	  visited[v] = true;
+	  task* nodev = dag->nodes[v];
+	  // Recur for all the vertices adjacent to this vertex
+	  for (auto pred:nodev->predecessors) {
+	    if (!visited[pred->id])
+	      topologicalSortUtil(dag,pred->id, visited, stack);
+	  }
+
+	  // Push current vertex to stack which stores topological
+	  // sort
+	  stack.push(v);
+}
+
+void longestDistVexit(DAG* dag, int vexit_id)
+{
+    stack<int> Stack;
+   	
+   	int V = vexit_id+1;
+    // Mark all the vertices as not visited
+    bool* visited = new bool[V];
+    for (int i = 0; i < V; i++)
+        visited[i] = false;
+   
+    // Call the recursive helper function to store Topological
+    // Sort starting from all vertices one by one
+    for (int i = 0; i < V; i++)
+        if (visited[i] == false)
+            topologicalSortUtil(i, visited, Stack);
+   
+    // Initialize distances to all vertices as infinite and
+    // distance to source as 0
+    for (auto node:dag->nodes)
+        node->vexit_dist = NINF;
+    dag->nodes[vexit_id] = 0;
+    // Process vertices in topological order
+    while (Stack.empty() == false) {
+        // Get the next vertex from topological order
+        int u = Stack.top();
+        Stack.pop();
+        task* nodeu = dag->nodes[u];
+   
+        if (nodeu->vexit_dist != NINF) {
+            for (auto pred: nodeu->predecessors){
+             
+                if (pred->vexit_dist < nodeu->vexit_dist + 1)
+                    pred->vexit_dist = nodeu->vexit_dist + 1;
+            }
+        }
+    }
+     
+    delete [] visited;
+}
+
+//returns a new dag with 
+// 1) duplicated nodes for tasks with recovery as per criteria
+// 2) added dummy nodes vexit and ventry
+// 3) dist from vexit is updated by calling a function
 DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	DAG* new_dag = new DAG();
 	*new_dag = *dag;
@@ -303,6 +363,33 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 			suc->predecessors.push_back(new_node);
 		}
 	}
+
+	task* ventry = new task();
+	ventry->worst_case_time = 0;
+
+	for(auto node:new_dag->nodes){
+		if(node->predecessors.empty()){
+			ventry->successors.push_back(node);
+			node->predecessors.push_back(ventry);
+		}
+	}
+
+	task* vexit = new task();
+	vexit->worst_case_time = 0;
+	for(auto node: new_dag->nodes){
+		if(node->successors.empty()){
+			vexit->predecessors.push_back(node);
+			node->successors.push_back(vexit);
+		}
+	}
+
+	ventry->id = new_dag->nodes.size();
+	vexit->id = ventry->id + 1;
+	new_dag->nodes.push_back(ventry);
+	new_dag->nodes.push_back(vexit);
+
+	longestDistVexit(dag,vexit->id);
+
 	return new_dag;
 }
 
