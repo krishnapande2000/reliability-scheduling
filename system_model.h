@@ -1,13 +1,3 @@
-#include <cctype> 
-#include <cerrno> 
-#include <cfloat> 
-#include <ciso646> 
-#include <climits> 
-#include <clocale> 
-#include <cmath> 
-#include <csetjmp>  
-#include <ctime>  
-  
 // C++ 
 #include <algorithm> 
 #include <bitset> 
@@ -67,6 +57,9 @@
 using namespace std;
 
 struct Core{
+	Core(){
+		total_time=0;
+	}
 	int id;
 	double hardware_coefficient;
 	double aging_rate;
@@ -79,10 +72,9 @@ struct Core{
 	double total_time;
 
 	vector<task*> tasks;
+	double free_at;
 
-	Core(){
-		total_time=0;
-	}
+	queue<task*> static_tasks_assigned;
 };
 
 class Multicore{

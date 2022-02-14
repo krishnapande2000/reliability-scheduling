@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "ciso646": "cpp",
-        "complex": "cpp"
+        "complex": "cpp",
+        "vector": "cpp"
     }
 }

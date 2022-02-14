@@ -237,8 +237,64 @@ void assign_freq(DAG* dag,int mode){
 //**********freq assigning algos end**************************************************************************************************88
 
 //**********recovery assigning algos**************************************************************************************************88
+//****sem8
+int numberOfRecoveriesStatic(DAG* dag, int start, int end){
+	if(start<=end) return start;
+	if(start == end - 1){
+		DAG* new_dag = DAG* new_dag = getNewDAG(dag, end);
+	    bool can_schedule_new_dag = canScheduleStatic(new_dag);
+		if(can_schedule_new_dag) return end;
+		else return start;
+	}
+	int mid = start + (end-start)/2;
+	DAG* new_dag = getNewDAG(dag, mid);
+	bool can_schedule_new_dag = canScheduleStatic(new_dag);
+	if(can_schedule_new_dag){
+		numberOfRecoveriesStatic(dag, mid, end);
+	}
+	else numberOfRecoveriesStatic(dag, start, mid-1);
+}
+
+bool compWorstCaseTime(task* i,task* j){
+	return i->worst_case_time < j->worst_case_time;
+}
 
 
+DAG* getNewDAG(DAG* dag, int number_of_recoveries){
+	DAG* new_dag = new DAG(dag);
+	//TODO(krishnahere): check ^
+	sort(new_dag->nodes.begin(), new_dag->nodes.end(),compWorstCaseTime);
+	for (int i = 0; i < number_of_recoveries; i++){
+		task* node = nodes[i];
+		node->recovery_assigned=true;
+		task* new_node = new task(node); //successor - prede.. done
+		//TODO(krishnahere): check ^
+		new_dag->nodes.push_back(new_node);
+		for(auto pred : node->predecessors){
+			pred->successors.push_back(new_node);
+		}
+		for(auto suc :  node->sucessors){
+			suc->predecessors.push_back(new_node);
+		}
+	}
+	return new_dag;
+}
+
+bool canScheduleStatic(DAG* node_graph){
+	//TODO(krishnahere): DO all.
+	
+	vector<Core> free_cores;
+	priority_queue<task*> processing_queue;
+	priority_queue<task*> ready_queue;
+
+
+}
+
+
+
+
+
+//****sem8
 void randomAlgo(Multicore* multicore, double deadline){
 	
 	for(auto core : multicore->cores){

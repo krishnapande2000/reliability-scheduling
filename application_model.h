@@ -74,6 +74,10 @@ struct task{
 	bool recovery_assigned;
 	int core_assigned;
 	double freq_assigned;
+	double end_time;
+	double execution_time;
+	double dynamic_ready_time;
+	double dynamic_process_start_time;
 
 	task(){
 		recovery_assigned = false;
