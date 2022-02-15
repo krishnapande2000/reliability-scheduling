@@ -101,7 +101,7 @@ double taskRecReliability(task* t, Core* c){
 	return Rreci;
 }
 
-double taskReliability_dynamic(task* t, Core* t, double execution_time){
+double taskReliability_dynamic(task* t, Core* c, double execution_time){
 	double ro = c->ro;
 	double w = c->hardware_coefficient;
 	double Fmin = c->Fmin;
@@ -257,22 +257,6 @@ void assign_freq(DAG* dag,int mode){
 
 //**********recovery assigning algos**************************************************************************************************88
 //****sem8
-int numberOfRecoveriesStatic(DAG* dag, int start, int end){
-	if(start<=end) return start;
-	if(start == end - 1){
-		DAG* new_dag = DAG* new_dag = getNewDAG(dag, end);
-	    bool can_schedule_new_dag = canScheduleStatic(new_dag);
-		if(can_schedule_new_dag) return end;
-		else return start;
-	}
-	int mid = start + (end-start)/2;
-	DAG* new_dag = getNewDAG(dag, mid);
-	bool can_schedule_new_dag = canScheduleStatic(new_dag);
-	if(can_schedule_new_dag){
-		numberOfRecoveriesStatic(dag, mid, end);
-	}
-	else numberOfRecoveriesStatic(dag, start, mid-1);
-}
 
 bool compWorstCaseTime(task* i,task* j){
 	return i->worst_case_time < j->worst_case_time;
@@ -284,7 +268,7 @@ bool compVexitDistance(task* i,task* j){
 	return i->vexit_dist < j->vexit_dist;
 }
 
-void topologicalSortUtil(DAG* dag,int v, bool visited[],stack<int>& stack)
+void topologicalSortUtil(DAG* dag,int v, vector<bool>& visited,stack<task*>& topo_stack)
 {
 	  // Mark the current node as visited
 	  visited[v] = true;
@@ -292,52 +276,53 @@ void topologicalSortUtil(DAG* dag,int v, bool visited[],stack<int>& stack)
 	  // Recur for all the vertices adjacent to this vertex
 	  for (auto pred:nodev->predecessors) {
 	    if (!visited[pred->id])
-	      topologicalSortUtil(dag,pred->id, visited, stack);
+	      topologicalSortUtil(dag,pred->id, visited, topo_stack);
 	  }
 
 	  // Push current vertex to stack which stores topological
 	  // sort
-	  stack.push(v);
+	  
+	  topo_stack.push(nodev);
 }
 
 void longestDistVexit(DAG* dag, int vexit_id)
 {
-    stack<int> Stack;
+    stack<task*> topo_stack;
    	
    	int V = vexit_id+1;
     // Mark all the vertices as not visited
-    bool* visited = new bool[V];
-    for (int i = 0; i < V; i++)
-        visited[i] = false;
+    vector<bool> visited(V,false);
    
     // Call the recursive helper function to store Topological
     // Sort starting from all vertices one by one
-    for (int i = 0; i < V; i++)
-        if (visited[i] == false)
-            topologicalSortUtil(i, visited, Stack);
+    for (int i = 0; i < V; i++){
+        if (visited[i] == false){
+            topologicalSortUtil(dag, i, visited, topo_stack);
+        }
+    }
    
     // Initialize distances to all vertices as infinite and
     // distance to source as 0
-    for (auto node:dag->nodes)
-        node->vexit_dist = NINF;
+    for (auto node:dag->nodes){
+        node->vexit_dist = INT_MAX;
+    }
     dag->nodes[vexit_id] = 0;
+
     // Process vertices in topological order
-    while (Stack.empty() == false) {
+    while (!topo_stack.empty()) {
         // Get the next vertex from topological order
-        int u = Stack.top();
-        Stack.pop();
-        task* nodeu = dag->nodes[u];
+        task* nodeu = topo_stack.top();
+        topo_stack.pop();
    
-        if (nodeu->vexit_dist != NINF) {
+        if (nodeu->vexit_dist != INT_MAX) {
             for (auto pred: nodeu->predecessors){
              
-                if (pred->vexit_dist < nodeu->vexit_dist + 1)
+                if (pred->vexit_dist < nodeu->vexit_dist + 1){
                     pred->vexit_dist = nodeu->vexit_dist + 1;
+                }
             }
         }
     }
-     
-    delete [] visited;
 }
 
 //returns a new dag with 
@@ -347,19 +332,21 @@ void longestDistVexit(DAG* dag, int vexit_id)
 DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	DAG* new_dag = new DAG();
 	*new_dag = *dag;
+
 	//TODO(krishnahere): check ^
 	sort(new_dag->nodes.begin(), new_dag->nodes.end(),compWorstCaseTime);
 	for (int i = 0; i < number_of_recoveries; i++){
-		task* node = nodes[i];
+		task* node = new_dag->nodes[i];
 		node->recovery_assigned=true;
 		task* new_node = new task(); //successor - prede.. done
 		*new_node = *node;
 		//TODO(krishnahere): check ^
+		new_node->id = new_dag->nodes.size();
 		new_dag->nodes.push_back(new_node);
 		for(auto pred : node->predecessors){
 			pred->successors.push_back(new_node);
 		}
-		for(auto suc :  node->sucessors){
+		for(auto suc :  node->successors){
 			suc->predecessors.push_back(new_node);
 		}
 	}
@@ -388,7 +375,13 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	new_dag->nodes.push_back(ventry);
 	new_dag->nodes.push_back(vexit);
 
-	longestDistVexit(dag,vexit->id);
+	// cout<<"this is the new DAG with backups and all";
+	// new_dag->displayDAG(); //compile and check
+
+	// cout<<"OLD DAG";
+	// dag->displayDAG(); //compile and check
+
+	longestDistVexit(new_dag,vexit->id);
 
 	return new_dag;
 }
@@ -397,12 +390,29 @@ bool canScheduleStatic(DAG* node_graph){
 	//TODO(krishnahere): DO all.
 	
 	vector<Core*> free_cores;
-	priority_queue<task*, vector<task*>,compEndTime> processing_queue;
-	priority_queue<task*, vector<task*>, compVexitDistance> ready_queue;
+	// priority_queue<task*, vector<task*>,compEndTime> processing_queue;
+	// priority_queue<task*, vector<task*>, compVexitDistance> ready_queue;
 
+	return true;
 
 }
 
+int numberOfRecoveriesStatic(DAG* dag, int start, int end){
+	if(start<=end) return start;
+	if(start == end - 1){
+		DAG* new_dag = getNewDAG(dag, end);
+	    bool can_schedule_new_dag = canScheduleStatic(new_dag);
+		if(can_schedule_new_dag) return end;
+		else return start;
+	}
+	int mid = start + (end-start)/2;
+	DAG* new_dag = getNewDAG(dag, mid);
+	bool can_schedule_new_dag = canScheduleStatic(new_dag);
+	if(can_schedule_new_dag){
+		numberOfRecoveriesStatic(dag, mid, end);
+	}
+	else numberOfRecoveriesStatic(dag, start, mid-1);
+}
 
 
 
@@ -548,23 +558,6 @@ bool isFeasible(task* i, task* j){
 
 // }
 
-int no_of_recoveries(){
-	int low = 0;
-	int high = dag->nodes.size();
-	int mid;
-	while(high>low)
-	{
-		mid = low + (high - low)/2;
-		if(static_schedule()){
-			low = mid;
-		}
-		else{
-			high = mid - 1;
-		}
-	}
-	return mid;
-}
-
 //**********recovery assigning algos end**************************************************************************************************88
  
 //**********constraint checks**************************************************************************************************88
@@ -667,10 +660,10 @@ int main(){
 	// print the name and result from each algo
 
 	vector<string> files;
-	files.push_back("./BenchmarkDagsTXT/Montage_100.txt");
+	files.push_back("./BenchmarkDagsTXT/Montage_25.txt");
 
 	for(auto filepath : files){
-		dag = new DAG();
+		DAG* dag = new DAG();
 		dag->inputDAG(filepath,NO_OF_CORES);
 
 		multicore = new Multicore();
@@ -685,6 +678,8 @@ int main(){
 		dag->displayDAG();
 
 		assign_freq(dag,2);
+
+		DAG* new_dag = getNewDAG(dag, 3);
 
 		max_time_taken = 0;
 		for(int i=0;i<dag->nodes.size();i++){
