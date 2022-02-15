@@ -2,6 +2,7 @@
     "files.associations": {
         "ciso646": "cpp",
         "complex": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "queue": "cpp"
     }
 }

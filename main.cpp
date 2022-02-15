@@ -261,11 +261,13 @@ void assign_freq(DAG* dag,int mode){
 bool compWorstCaseTime(task* i,task* j){
 	return i->worst_case_time < j->worst_case_time;
 }
+
 bool compEndTime(task* i,task* j){
-	return i->end_time < j->end_time;
+	return i->end_time > j->end_time;
 }
+
 bool compVexitDistance(task* i,task* j){
-	return i->vexit_dist < j->vexit_dist;
+	return i->vexit_dist > j->vexit_dist;
 }
 
 void topologicalSortUtil(DAG* dag,int v, vector<bool>& visited,stack<task*>& topo_stack)
@@ -325,7 +327,7 @@ void longestDistVexit(DAG* dag, int vexit_id)
     }
 }
 
-//returns a new dag with 
+// returns a new dag with 
 // 1) duplicated nodes for tasks with recovery as per criteria
 // 2) added dummy nodes vexit and ventry
 // 3) dist from vexit is updated by calling a function
@@ -353,6 +355,8 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 
 	task* ventry = new task();
 	ventry->worst_case_time = 0;
+	ventry->process_start_time = 0;
+	ventry->process_end_time = 0;
 
 	for(auto node:new_dag->nodes){
 		if(node->predecessors.empty()){
@@ -363,6 +367,9 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 
 	task* vexit = new task();
 	vexit->worst_case_time = 0;
+	vexit->process_start_time = 0;
+	vexity->process_end_time = 0;
+
 	for(auto node: new_dag->nodes){
 		if(node->successors.empty()){
 			vexit->predecessors.push_back(node);
@@ -387,13 +394,57 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 }
 
 bool canScheduleStatic(DAG* node_graph){
-	//TODO(krishnahere): DO all.
-	
 	vector<Core*> free_cores;
-	// priority_queue<task*, vector<task*>,compEndTime> processing_queue;
-	// priority_queue<task*, vector<task*>, compVexitDistance> ready_queue;
+	priority_queue<task*, vector<task*>,compEndTime> processing_queue;
+	priority_queue<task*, vector<task*>, compVexitDistance> ready_queue;
 
-	return true;
+	for(task* node : node_graph->nodes){
+		node->processed_predecessors = 0;
+	}
+	processing_queue.push(ventry);
+	while (!processing_queue.empty()){
+		task* top_node = processing_queue.top();
+		processing_queue.pop();
+		double end_time = top_node->process_end_time;
+		while(true){
+			for(task* child : top_node->successors){
+				child->processed_predecessors ++;
+				if(child->processed_predecessors == child->predecessors.size()){
+					child->process_ready_time = end_time;
+					ready_queue.push(child);
+				}
+			}
+			top_node->core_assigned->free_at = end_time;
+			free_cores.push_back(top_node->core_assigned);
+
+			// if processing queue has same end time for other nodes
+			// remove those nodes too 
+			if(!processing_queue.empty()&&processing_queue.top()->process_end_time == end_time){
+				top_node = processing_queue.top();
+				processing_queue.pop();
+			}
+			else break;
+		}
+
+		// now assigning free cores to ready queue tasks
+		int i = 0;
+		while(!free_cores.empty()&&!ready_queue.empty()){
+			Core* free_core = free_cores[i];
+			task* next_node = ready_queue.top();
+			next_node->core_assigned = free_core;
+			next_node->process_start_time = max(next_node->dynamic_ready_time, free_core->free_at);
+			next_node->end_time = next_node->process_start_time + next_node->worst_case_time;
+			if(next_node->process_end_time > node_graph->deadline) {
+				i++;
+			}
+			else{
+				ready_queue.pop();
+				processing_list.push(next_node);
+				free_cores.remove(free_core.begin()+i);
+				i = 0;
+			}
+		}
+	}
 
 }
 
