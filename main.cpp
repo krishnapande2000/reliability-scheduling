@@ -101,16 +101,17 @@ double taskRecReliability(task* t, Core* c){
 	return Rreci;
 }
 
-double taskReliability_dynamic(task* t, Core* c, double execution_time){
+double taskReliability_dynamic(task* t, Core* c){
 	double ro = c->ro;
 	double w = c->hardware_coefficient;
 	double Fmin = c->Fmin;
 	double Fmax = c->Fmax;
 
+	double exec_time = t->execution_time;
 	double freq = t->freq_assigned;
 
 	double rf = ro*(pow(10,(w*(1-freq))/(1-Fmin)));
-	double Ri = exp((-1)*(rf*execution_time));
+	double Ri = exp((-1)*(rf*exec_time));
 
 	//cout<<" task id "<<t->id<<" Ri : "<<Ri<<" \n";
 
@@ -173,30 +174,28 @@ double taskPreci(Core* c,int i){
 	return RiFmax*(*PMil);
 }
 
-double systemReliability(Multicore* multicore){
+double systemReliability(DAG* dag, int no_of_tasks){
+
 	double Rsys = 1;
+	int i=0;
+	for(auto task : dag->nodes){
 
-	for(auto core : multicore->cores){
-		int i=0;
-		for(auto task : core->tasks){
-
-			double Ri = taskReliability(task,core);
-			// double Preci = taskPreci(core,i);
-			double Rreci = Ri;
-			if(task->recovery_assigned){
-				Rreci = 1.0 - (1.0-Ri)*(1.0-Ri);
-			}
-
-			Rsys*=Rreci;
-
-			// cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<"Rsys : "<<Rsys<<" \n";
-
-			i++;
+		Core* core = multicore->cores[task->core_assigned];
+		double Ri = taskReliability(task,core);
+		double Rreci = Ri;
+		if(task->recovery_assigned){
+			Rreci = 1.0 - (1.0-Ri)*(1.0-Ri);
 		}
-	}
 
-	return Rsys;
+		Rsys*=Rreci;
+
+		// cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<"Rsys : "<<Rsys<<" \n";
+
+		i++;
+		if(i==no_of_tasks)break;
+	}
 	
+	return Rsys;
 }
 
 double lifetimeReliability(task* t,Core* c){
@@ -258,16 +257,24 @@ void assign_freq(DAG* dag,int mode){
 //**********recovery assigning algos**************************************************************************************************88
 //****sem8
 
+struct CompWorstCaseTime{
+	bool operator()(task* i,task* j){
+	return i->worst_case_time < j->worst_case_time;
+	}
+};
+struct CompEndTime{
+	bool operator()(task* i,task* j){
+	return i->end_time > j->end_time;
+	}
+};
+struct CompVexitDistance{
+	bool operator()(task* i,task* j){
+	return i->vexit_dist > j->vexit_dist;
+	}
+};
+
 bool compWorstCaseTime(task* i,task* j){
 	return i->worst_case_time < j->worst_case_time;
-}
-
-bool compEndTime(task* i,task* j){
-	return i->end_time > j->end_time;
-}
-
-bool compVexitDistance(task* i,task* j){
-	return i->vexit_dist > j->vexit_dist;
 }
 
 void topologicalSortUtil(DAG* dag,int v, vector<bool>& visited,stack<task*>& topo_stack)
@@ -335,6 +342,7 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	DAG* new_dag = new DAG();
 	*new_dag = *dag;
 
+	new_dag->resetAssignment();
 	//TODO(krishnahere): check ^
 	sort(new_dag->nodes.begin(), new_dag->nodes.end(),compWorstCaseTime);
 	for (int i = 0; i < number_of_recoveries; i++){
@@ -355,8 +363,8 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 
 	task* ventry = new task();
 	ventry->worst_case_time = 0;
-	ventry->process_start_time = 0;
-	ventry->process_end_time = 0;
+	ventry->start_time = 0;
+	ventry->end_time = 0;
 
 	for(auto node:new_dag->nodes){
 		if(node->predecessors.empty()){
@@ -367,8 +375,8 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 
 	task* vexit = new task();
 	vexit->worst_case_time = 0;
-	vexit->process_start_time = 0;
-	vexity->process_end_time = 0;
+	vexit->start_time = 0;
+	vexit->end_time = 0;
 
 	for(auto node: new_dag->nodes){
 		if(node->successors.empty()){
@@ -381,6 +389,8 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	vexit->id = ventry->id + 1;
 	new_dag->nodes.push_back(ventry);
 	new_dag->nodes.push_back(vexit);
+	new_dag->ventry_id = ventry->id;
+	new_dag->vexit_id = vexit->id;
 
 	// cout<<"this is the new DAG with backups and all";
 	// new_dag->displayDAG(); //compile and check
@@ -394,32 +404,35 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 }
 
 bool canScheduleStatic(DAG* node_graph){
+	multicore->clear_cores();
 	vector<Core*> free_cores;
-	priority_queue<task*, vector<task*>,compEndTime> processing_queue;
-	priority_queue<task*, vector<task*>, compVexitDistance> ready_queue;
+	priority_queue<task*, vector<task*>,CompEndTime> processing_queue;
+	priority_queue<task*, vector<task*>,CompVexitDistance> ready_queue;
 
 	for(task* node : node_graph->nodes){
 		node->processed_predecessors = 0;
 	}
-	processing_queue.push(ventry);
+	processing_queue.push(node_graph->nodes[node_graph->ventry_id]);
 	while (!processing_queue.empty()){
 		task* top_node = processing_queue.top();
 		processing_queue.pop();
-		double end_time = top_node->process_end_time;
+		double end_time = top_node->end_time;
 		while(true){
+
+			Core* core_assigned = multicore->cores[top_node->core_assigned];
 			for(task* child : top_node->successors){
 				child->processed_predecessors ++;
 				if(child->processed_predecessors == child->predecessors.size()){
-					child->process_ready_time = end_time;
+					child->ready_time = end_time;
 					ready_queue.push(child);
 				}
 			}
-			top_node->core_assigned->free_at = end_time;
-			free_cores.push_back(top_node->core_assigned);
+			core_assigned->free_at = end_time;
+			free_cores.push_back(core_assigned);
 
 			// if processing queue has same end time for other nodes
 			// remove those nodes too 
-			if(!processing_queue.empty()&&processing_queue.top()->process_end_time == end_time){
+			if(!processing_queue.empty()&&processing_queue.top()->end_time == end_time){
 				top_node = processing_queue.top();
 				processing_queue.pop();
 			}
@@ -431,20 +444,24 @@ bool canScheduleStatic(DAG* node_graph){
 		while(!free_cores.empty()&&!ready_queue.empty()){
 			Core* free_core = free_cores[i];
 			task* next_node = ready_queue.top();
-			next_node->core_assigned = free_core;
-			next_node->process_start_time = max(next_node->dynamic_ready_time, free_core->free_at);
-			next_node->end_time = next_node->process_start_time + next_node->worst_case_time;
-			if(next_node->process_end_time > node_graph->deadline) {
+			next_node->start_time = max(next_node->ready_time, free_core->free_at);
+			next_node->end_time = next_node->start_time + next_node->worst_case_time;
+			if(next_node->end_time > node_graph->deadline) {
 				i++;
+				if(i==NO_OF_CORES) return false;
 			}
 			else{
+				next_node->core_assigned = free_core->id;
+				free_core->tasks.push_back(next_node);
 				ready_queue.pop();
-				processing_list.push(next_node);
-				free_cores.remove(free_core.begin()+i);
+				processing_queue.push(next_node);
+				free_cores.erase(free_cores.begin()+i);
 				i = 0;
 			}
 		}
 	}
+
+	return true;
 
 }
 
@@ -634,75 +651,17 @@ bool isWithinDeadline(Multicore* multicore, double deadline){
 
 bool hasMTTF(Multicore* multicore){
 
-	return systemReliability(multicore) >= LIFETIME_THRESHOLD;
+	return systemLifetimeReliability(multicore) >= LIFETIME_THRESHOLD;
 }
 
 //**********constraint checks end**************************************************************************************************88
 
 int main(){
 
-	// cout<<"generating cores\n";
-	// //generating cores
-	// multicore = new Multicore();
-	// multicore->generateCores(NO_OF_CORES);
-
-
-	// cout<<"generating DAG\n";
-	// //create or input a DAG
-	// DAG* dag = new DAG();
-	// dag->generateDAG(NO_OF_TASKS,NO_OF_CORES);
-
-	// for(int i=0;i<dag->nodes.size();i++){
-	// 	int core_id = dag->nodes[i]->core_assigned;
-	// 	multicore->cores[core_id]->tasks.push_back(dag->nodes[i]);
-	// }
-
-
-	// //dag->displayDAG();
-
-	// //applying algo to assign frequencies to tasks
-
-	// assign_freq(dag,2);
-
-	double max_time_taken = 0;
-	// for(int i=0;i<dag->nodes.size();i++){
-	// 	int core_id = dag->nodes[i]->core_assigned;
-	// 	multicore->cores[core_id]->total_time+=dag->nodes[i]->worst_case_time/dag->nodes[i]->freq_assigned; //so we add time taken actually.
-	// 	max_time_taken = max(max_time_taken,multicore->cores[core_id]->total_time);
-	// }
-	// dag->deadline = 1.2*(max_time_taken);
-	// DEADLINE = dag->deadline;
-
-
+	
 	// applying algo to assign recoveries :
 
 
-	// cout<<"applying a randomAlgo to give recoveries to some tasks\n";
-	// randomAlgo(multicore,dag->deadline);
-	// double rsys = systemReliability(multicore);
-	// cout<<"System reliability : "<<rsys<<" \n";
-	// cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
-	// cout<<"MTTFsys is as:\n"<<systemLifetimeReliability(multicore);
-	// cout<<"****************\n";
-	// dag->resetAssignment();
-
-
-	// cout<<"applying a GREEDY Algo to give recoveries to some tasks\n";
-	// greedyReliabilityAlgo(multicore,dag->deadline);
-	// rsys = systemReliability(multicore);
-	// cout<<"System reliability : "<<rsys<<" \n";
-	// cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
-	// // cout<<"MTTFsys is as:\n"<<systemLifetimeReliability(multicore);
-	// // cout<<"****************\n";
- //    dag->resetAssignment();
-
-	// cout<<"applying a GREEDY TIME Algo to give recoveries to some tasks\n";
-	// greedyTimeAlgo(multicore,dag->deadline);
-	// rsys = systemReliability(multicore);
-	// cout<<"System reliability : "<<rsys<<" \n";
-	// cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
-
-	//calculating reliability
 
 
 	//create a list of file paths here
@@ -713,6 +672,9 @@ int main(){
 	vector<string> files;
 	files.push_back("./BenchmarkDagsTXT/Montage_25.txt");
 
+
+	cout<<"Name of file \t No of Rec \t Rsys \n";
+
 	for(auto filepath : files){
 		DAG* dag = new DAG();
 		dag->inputDAG(filepath,NO_OF_CORES);
@@ -720,48 +682,29 @@ int main(){
 		multicore = new Multicore();
 		multicore->generateCores(NO_OF_CORES);
 
-		for(int i=0;i<dag->nodes.size();i++)
-		{
-			int core_id = dag->nodes[i]->core_assigned;
-			multicore->cores[core_id]->tasks.push_back(dag->nodes[i]);
-		}
-
 		dag->displayDAG();
 
+		// assign frequency
 		assign_freq(dag,2);
 
-		DAG* new_dag = getNewDAG(dag, 3);
-
-		max_time_taken = 0;
-		for(int i=0;i<dag->nodes.size();i++){
-			int core_id = dag->nodes[i]->core_assigned;
-			multicore->cores[core_id]->total_time+=dag->nodes[i]->worst_case_time/dag->nodes[i]->freq_assigned; //so we add time taken actually.
-			max_time_taken = max(max_time_taken,multicore->cores[core_id]->total_time);
+		//create a reasonable deadline
+		double total_time = 0;
+		for(auto node:dag->nodes){
+			total_time+=node->worst_case_time;
 		}
-		dag->deadline = 1.4*(max_time_taken);
+		dag->deadline = 1.5*(total_time/(double)NO_OF_CORES);
 		DEADLINE = dag->deadline;
 
-		//randomAlgo
-		cout<<"applying a randomAlgo to give recoveries to some tasks\n";
-		randomAlgo(multicore,dag->deadline);
-		double rsys = systemReliability(multicore);
-		cout<<"System reliability : "<<rsys<<" \n";
-		cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
-		dag->resetAssignment();
+		//use algo
+		int no_of_recoveries = numberOfRecoveriesStatic(dag,0,dag->nodes.size());
+		DAG* new_dag = getNewDAG(dag,no_of_recoveries);
+		canScheduleStatic(new_dag);
+		double Rsys = systemReliability(new_dag, dag->nodes.size());
 
 
-		cout<<"applying a GREEDY Algo to give recoveries to some tasks\n";
-		greedyReliabilityAlgo(multicore,dag->deadline);
-		rsys = systemReliability(multicore);
-		cout<<"System reliability : "<<rsys<<" \n";
-		cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
-	    dag->resetAssignment();
+		//print reliability
+		cout<<filepath<<"\t"<<no_of_recoveries<<"\t"<<Rsys<<"\t"<<endl;
 
-		cout<<"applying a GREEDY TIME Algo to give recoveries to some tasks\n";
-		greedyTimeAlgo(multicore,dag->deadline);
-		rsys = systemReliability(multicore);
-		cout<<"System reliability : "<<rsys<<" \n";
-		cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
 
 
 	}
@@ -769,3 +712,33 @@ int main(){
 	return 0;
 
 }
+
+
+
+/*
+CODE DUMP
+
+//randomAlgo
+cout<<"applying a randomAlgo to give recoveries to some tasks\n";
+randomAlgo(multicore,dag->deadline);
+double rsys = systemReliability(multicore);
+cout<<"System reliability : "<<rsys<<" \n";
+cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
+dag->resetAssignment();
+
+
+cout<<"applying a GREEDY Algo to give recoveries to some tasks\n";
+greedyReliabilityAlgo(multicore,dag->deadline);
+rsys = systemReliability(multicore);
+cout<<"System reliability : "<<rsys<<" \n";
+cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
+dag->resetAssignment();
+
+cout<<"applying a GREEDY TIME Algo to give recoveries to some tasks\n";
+greedyTimeAlgo(multicore,dag->deadline);
+rsys = systemReliability(multicore);
+cout<<"System reliability : "<<rsys<<" \n";
+cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
+
+
+*/

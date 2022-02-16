@@ -84,4 +84,5 @@ public:
 	Multicore();
 
 	void generateCores(int no_of_cores);
+	void clear_cores();
 };

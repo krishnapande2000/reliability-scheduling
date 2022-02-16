@@ -96,8 +96,15 @@ void Multicore::generateCores(int no_of_cores){
 		newCore->Fmin = 0.01;
 		newCore->ro = 1e-5;
 		newCore->id = i;
+		newCore->free_at = INT_MAX;
 
 		cores.push_back(newCore);
 
+	}
+}
+
+void Multicore::clear_cores(){
+	for(auto core:cores){
+		core->tasks.clear();
 	}
 }

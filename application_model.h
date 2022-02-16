@@ -74,11 +74,16 @@ struct task{
 	bool recovery_assigned;
 	int core_assigned;
 	double freq_assigned;
+
+	double start_time;
 	double end_time;
+	double ready_time;
 	double execution_time;
 	double dynamic_ready_time;
 	double dynamic_process_start_time;
+
 	int vexit_dist;
+	int processed_predecessors;
 
 	task(){
 		recovery_assigned = false;
@@ -99,6 +104,9 @@ class DAG
 		vector<edge*> edges;
 
 	double deadline;
+
+	int ventry_id;
+	int vexit_id;
 	// edges[task i]->task j, task k, task l. j,k,l depend on i
 	DAG();
 	DAG(vector<task*> nodes, vector<edge*> edges, double deadline);
