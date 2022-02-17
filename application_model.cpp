@@ -153,7 +153,7 @@ void DAG::inputDAG(string filepath, int no_of_cores){
 	//read from file and create a DAG 
 	// have filepath as input
 
-	cout<<"reading DAG from file "<<filepath<<"\n";
+	// cout<<"reading DAG from file "<<filepath<<"\n";
 
 	fstream fin(filepath);
 	int no_of_jobs;
@@ -188,8 +188,6 @@ void DAG::inputDAG(string filepath, int no_of_cores){
 
 		edges.push_back(newEdge);
 	}
-
-	cout<<"reading done DAG generated\n";
 
 
 }

@@ -83,7 +83,7 @@ struct task{
 	double dynamic_process_start_time;
 
 	int vexit_dist;
-	int processed_predecessors;
+	int remaining_predecessors;
 
 	task(){
 		recovery_assigned = false;

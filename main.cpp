@@ -65,7 +65,7 @@
 #include "system_model.h"
 using namespace std;
 
-int NO_OF_CORES = 8;
+int NO_OF_CORES = 3;
 
 int NO_OF_TASKS = 50;
 
@@ -174,12 +174,12 @@ double taskPreci(Core* c,int i){
 	return RiFmax*(*PMil);
 }
 
-double systemReliability(DAG* dag, int no_of_tasks){
+double systemReliability(DAG* dag){
 
 	double Rsys = 1;
-	int i=0;
 	for(auto task : dag->nodes){
 
+		if(task->id == dag->ventry_id || task->id==dag->vexit_id)continue;
 		Core* core = multicore->cores[task->core_assigned];
 		double Ri = taskReliability(task,core);
 		double Rreci = Ri;
@@ -191,8 +191,6 @@ double systemReliability(DAG* dag, int no_of_tasks){
 
 		// cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<"Rsys : "<<Rsys<<" \n";
 
-		i++;
-		if(i==no_of_tasks)break;
 	}
 	
 	return Rsys;
@@ -274,48 +272,50 @@ struct CompVexitDistance{
 };
 
 bool compWorstCaseTime(task* i,task* j){
-	return i->worst_case_time < j->worst_case_time;
+	return i->worst_case_time > j->worst_case_time;
 }
 
-void topologicalSortUtil(DAG* dag,int v, vector<bool>& visited,stack<task*>& topo_stack)
-{
-	  // Mark the current node as visited
-	  visited[v] = true;
-	  task* nodev = dag->nodes[v];
-	  // Recur for all the vertices adjacent to this vertex
-	  for (auto pred:nodev->predecessors) {
-	    if (!visited[pred->id])
-	      topologicalSortUtil(dag,pred->id, visited, topo_stack);
-	  }
+// void topologicalSortUtil(DAG* dag,int v, vector<bool>& visited,stack<task*>& topo_stack)
+// {
+// 	  // Mark the current node as visited
+// 	  visited[v] = true;
+// 	  task* nodev = dag->nodes[v];
+// 	  // Recur for all the vertices adjacent to this vertex
+// 	  for (auto pred:nodev->predecessors) {
+// 	    if (!visited[pred->id])
+// 	      topologicalSortUtil(dag,pred->id, visited, topo_stack);
+// 	  }
 
-	  // Push current vertex to stack which stores topological
-	  // sort
+// 	  // Push current vertex to stack which stores topological
+// 	  // sort
 	  
-	  topo_stack.push(nodev);
-}
+// 	  topo_stack.push(nodev);
+// }
 
-void longestDistVexit(DAG* dag, int vexit_id)
+void longestDistVexit(DAG* dag)
 {
     stack<task*> topo_stack;
    	
+   	int vexit_id = dag->vexit_id;
    	int V = vexit_id+1;
     // Mark all the vertices as not visited
     vector<bool> visited(V,false);
    
     // Call the recursive helper function to store Topological
     // Sort starting from all vertices one by one
-    for (int i = 0; i < V; i++){
-        if (visited[i] == false){
-            topologicalSortUtil(dag, i, visited, topo_stack);
-        }
-    }
+    // for (int i = 0; i < V; i++){
+    //     if (visited[i] == false){
+    //         topologicalSortUtil(dag, i, visited, topo_stack);
+    //     }
+    // }
    
     // Initialize distances to all vertices as infinite and
     // distance to source as 0
     for (auto node:dag->nodes){
-        node->vexit_dist = INT_MAX;
+        node->vexit_dist = INT_MIN;
+        topo_stack.push(node);
     }
-    dag->nodes[vexit_id] = 0;
+    dag->nodes[vexit_id]->vexit_dist = 0;
 
     // Process vertices in topological order
     while (!topo_stack.empty()) {
@@ -323,7 +323,7 @@ void longestDistVexit(DAG* dag, int vexit_id)
         task* nodeu = topo_stack.top();
         topo_stack.pop();
    
-        if (nodeu->vexit_dist != INT_MAX) {
+        if (nodeu->vexit_dist != INT_MIN) {
             for (auto pred: nodeu->predecessors){
              
                 if (pred->vexit_dist < nodeu->vexit_dist + 1){
@@ -343,14 +343,15 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	*new_dag = *dag;
 
 	new_dag->resetAssignment();
-	//TODO(krishnahere): check ^
-	sort(new_dag->nodes.begin(), new_dag->nodes.end(),compWorstCaseTime);
+	
+	vector<task*> sorted_nodes = new_dag->nodes;
+	sort(sorted_nodes.begin(), sorted_nodes.end(),compWorstCaseTime);
 	for (int i = 0; i < number_of_recoveries; i++){
-		task* node = new_dag->nodes[i];
+		task* node = sorted_nodes[i];
 		node->recovery_assigned=true;
 		task* new_node = new task(); //successor - prede.. done
 		*new_node = *node;
-		//TODO(krishnahere): check ^
+		
 		new_node->id = new_dag->nodes.size();
 		new_dag->nodes.push_back(new_node);
 		for(auto pred : node->predecessors){
@@ -385,9 +386,9 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 		}
 	}
 
-	ventry->id = new_dag->nodes.size();
-	vexit->id = ventry->id + 1;
-	new_dag->nodes.push_back(ventry);
+	ventry->id = 0;
+	vexit->id = new_dag->nodes.size() + 1;
+	new_dag->nodes.insert(new_dag->nodes.begin(),ventry);
 	new_dag->nodes.push_back(vexit);
 	new_dag->ventry_id = ventry->id;
 	new_dag->vexit_id = vexit->id;
@@ -398,31 +399,45 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	// cout<<"OLD DAG";
 	// dag->displayDAG(); //compile and check
 
-	longestDistVexit(new_dag,vexit->id);
+	longestDistVexit(new_dag);
 
 	return new_dag;
 }
 
 bool canScheduleStatic(DAG* node_graph){
 	multicore->clear_cores();
+
+
 	vector<Core*> free_cores;
+	for(auto core:multicore->cores){
+		free_cores.push_back(core);
+		core->free_at = 0;
+	}
+
 	priority_queue<task*, vector<task*>,CompEndTime> processing_queue;
 	priority_queue<task*, vector<task*>,CompVexitDistance> ready_queue;
 
 	for(task* node : node_graph->nodes){
-		node->processed_predecessors = 0;
+		node->remaining_predecessors = node->predecessors.size();
+		node->core_assigned = 0;
 	}
+	node_graph->nodes[node_graph->ventry_id]->core_assigned = free_cores.back()->id;
+	free_cores.pop_back();
 	processing_queue.push(node_graph->nodes[node_graph->ventry_id]);
+
+
+
 	while (!processing_queue.empty()){
 		task* top_node = processing_queue.top();
+		//cout<<top_node->id<<" * ";
 		processing_queue.pop();
 		double end_time = top_node->end_time;
 		while(true){
 
 			Core* core_assigned = multicore->cores[top_node->core_assigned];
 			for(task* child : top_node->successors){
-				child->processed_predecessors ++;
-				if(child->processed_predecessors == child->predecessors.size()){
+				child->remaining_predecessors --;
+				if(child->remaining_predecessors == 0){
 					child->ready_time = end_time;
 					ready_queue.push(child);
 				}
@@ -432,7 +447,7 @@ bool canScheduleStatic(DAG* node_graph){
 
 			// if processing queue has same end time for other nodes
 			// remove those nodes too 
-			if(!processing_queue.empty()&&processing_queue.top()->end_time == end_time){
+			if(!processing_queue.empty() && processing_queue.top()->end_time == end_time){
 				top_node = processing_queue.top();
 				processing_queue.pop();
 			}
@@ -441,17 +456,19 @@ bool canScheduleStatic(DAG* node_graph){
 
 		// now assigning free cores to ready queue tasks
 		int i = 0;
-		while(!free_cores.empty()&&!ready_queue.empty()){
+		while(!free_cores.empty() && !ready_queue.empty()){
 			Core* free_core = free_cores[i];
 			task* next_node = ready_queue.top();
-			next_node->start_time = max(next_node->ready_time, free_core->free_at);
-			next_node->end_time = next_node->start_time + next_node->worst_case_time;
-			if(next_node->end_time > node_graph->deadline) {
+			double prob_start_time = max(next_node->ready_time, free_core->free_at);
+			double prob_end_time = next_node->start_time + next_node->worst_case_time;
+			if(prob_end_time > node_graph->deadline) {
 				i++;
-				if(i==NO_OF_CORES) return false;
+				if(i == free_cores.size()) return false;
 			}
 			else{
 				next_node->core_assigned = free_core->id;
+				next_node->start_time = prob_start_time;
+				next_node->end_time = prob_end_time;
 				free_core->tasks.push_back(next_node);
 				ready_queue.pop();
 				processing_queue.push(next_node);
@@ -465,21 +482,35 @@ bool canScheduleStatic(DAG* node_graph){
 
 }
 
-int numberOfRecoveriesStatic(DAG* dag, int start, int end){
-	if(start<=end) return start;
-	if(start == end - 1){
-		DAG* new_dag = getNewDAG(dag, end);
-	    bool can_schedule_new_dag = canScheduleStatic(new_dag);
-		if(can_schedule_new_dag) return end;
-		else return start;
-	}
+int numberOfRecoveriesStatic(DAG* dag){
+	int n = dag->nodes.size();
+	int start =0;
+	int end = n;
+
 	int mid = start + (end-start)/2;
-	DAG* new_dag = getNewDAG(dag, mid);
-	bool can_schedule_new_dag = canScheduleStatic(new_dag);
-	if(can_schedule_new_dag){
-		numberOfRecoveriesStatic(dag, mid, end);
+
+	while(end>=start){
+
+		mid = start + (end-start)/2;
+		DAG* new_dag_mid = getNewDAG(dag, mid);
+		bool can_schedule_new_dag_mid = canScheduleStatic(new_dag_mid);
+
+		
+		if((mid == n) && can_schedule_new_dag_mid)
+		{
+			return mid;
+		}
+		else if(can_schedule_new_dag_mid){
+
+			DAG* new_dag_next = getNewDAG(dag,mid+1);
+			bool can_schedule_new_dag_next = canScheduleStatic(new_dag_next);
+			if(!can_schedule_new_dag_next) return mid;
+			else start = mid+1;
+		}
+		else end=mid-1;
 	}
-	else numberOfRecoveriesStatic(dag, start, mid-1);
+
+	return 0;
 }
 
 
@@ -671,9 +702,12 @@ int main(){
 
 	vector<string> files;
 	files.push_back("./BenchmarkDagsTXT/Montage_25.txt");
+	files.push_back("./BenchmarkDagsTXT/CyberShake_30.txt");
+	files.push_back("./BenchmarkDagsTXT/Inspiral_30.txt");
+	files.push_back("./BenchmarkDagsTXT/Sipht_30.txt");
 
 
-	cout<<"Name of file \t No of Rec \t Rsys \n";
+	cout<<"Name of file \t Rsys \n";
 
 	for(auto filepath : files){
 		DAG* dag = new DAG();
@@ -682,28 +716,32 @@ int main(){
 		multicore = new Multicore();
 		multicore->generateCores(NO_OF_CORES);
 
-		dag->displayDAG();
+		//dag->displayDAG();
 
 		// assign frequency
 		assign_freq(dag,2);
 
-		//create a reasonable deadline
+		// create a reasonable deadline
 		double total_time = 0;
 		for(auto node:dag->nodes){
 			total_time+=node->worst_case_time;
 		}
-		dag->deadline = 1.5*(total_time/(double)NO_OF_CORES);
+		dag->deadline = 0.5*(total_time/(double)NO_OF_CORES);
 		DEADLINE = dag->deadline;
 
 		//use algo
-		int no_of_recoveries = numberOfRecoveriesStatic(dag,0,dag->nodes.size());
+		int no_of_recoveries = numberOfRecoveriesStatic(dag);
+		no_of_recoveries = 3;
 		DAG* new_dag = getNewDAG(dag,no_of_recoveries);
 		canScheduleStatic(new_dag);
-		double Rsys = systemReliability(new_dag, dag->nodes.size());
+		
+
+
+		double Rsys = systemReliability(new_dag);
 
 
 		//print reliability
-		cout<<filepath<<"\t"<<no_of_recoveries<<"\t"<<Rsys<<"\t"<<endl;
+		 cout<<filepath<<"\t"<<Rsys<<"\t"<<endl;
 
 
 
