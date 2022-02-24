@@ -3,6 +3,9 @@
         "ciso646": "cpp",
         "complex": "cpp",
         "vector": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "iostream": "cpp",
+        "ostream": "cpp",
+        "cstdio": "cpp"
     }
 }

@@ -87,12 +87,27 @@ struct task{
 
 	task(){
 		recovery_assigned = false;
+		core_assigned = 0;
+		freq_assigned = 0.0;
+
+		start_time = 0.0;
+		end_time = 0.0;
+		ready_time = 0.0;
+		execution_time = 0.0;
+		dynamic_ready_time = 0.0;
+		dynamic_process_start_time = 0.0;
+
+		vexit_dist = 0;
+		remaining_predecessors = 0;
 	}
 };
 
 struct edge{
 	task* src;
 	task* dest;
+
+	edge(){
+	}
 };
 
 class DAG 
@@ -104,12 +119,13 @@ class DAG
 		vector<edge*> edges;
 
 	double deadline;
-
+	string filesname;
 	int ventry_id;
 	int vexit_id;
 	// edges[task i]->task j, task k, task l. j,k,l depend on i
 	DAG();
 	DAG(vector<task*> nodes, vector<edge*> edges, double deadline);
+	void CopyDAG(DAG* new_dag);
 
 	//sort topologically
 

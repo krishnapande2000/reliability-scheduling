@@ -69,7 +69,7 @@ int NO_OF_CORES = 3;
 
 int NO_OF_TASKS = 50;
 
-double DEADLINE = 0;
+double DEADLINE = 0.0;
 
 double LIFETIME_THRESHOLD = 40;
 
@@ -340,7 +340,7 @@ void longestDistVexit(DAG* dag)
 // 3) dist from vexit is updated by calling a function
 DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	DAG* new_dag = new DAG();
-	*new_dag = *dag;
+	new_dag->inputDAG(dag->filesname, NO_OF_CORES);
 
 	new_dag->resetAssignment();
 	
@@ -351,8 +351,7 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 		node->recovery_assigned=true;
 		task* new_node = new task(); //successor - prede.. done
 		*new_node = *node;
-		
-		new_node->id = new_dag->nodes.size();
+		new_node->id = new_dag->nodes.size() + 1;
 		new_dag->nodes.push_back(new_node);
 		for(auto pred : node->predecessors){
 			pred->successors.push_back(new_node);
@@ -360,6 +359,7 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 		for(auto suc :  node->successors){
 			suc->predecessors.push_back(new_node);
 		}
+		// cout<<"recovery: "<<node->id<<" to "<<new_node->id<<endl;
 	}
 
 	task* ventry = new task();
@@ -421,17 +421,22 @@ bool canScheduleStatic(DAG* node_graph){
 		node->remaining_predecessors = node->predecessors.size();
 		node->core_assigned = 0;
 	}
+	// cout<<free_cores.size()<<endl;
+
 	node_graph->nodes[node_graph->ventry_id]->core_assigned = free_cores.back()->id;
 	free_cores.pop_back();
+
+	// cout<<node_graph->nodes[node_graph->ventry_id]->core_assigned<<" free core size - "<<free_cores.size()<<endl;
 	processing_queue.push(node_graph->nodes[node_graph->ventry_id]);
 
 
 
 	while (!processing_queue.empty()){
 		task* top_node = processing_queue.top();
-		//cout<<top_node->id<<" * ";
+		// cout<<top_node->id<<" * ";
 		processing_queue.pop();
 		double end_time = top_node->end_time;
+		// cout<<"end time -- "<<end_time<<" - ";
 		while(true){
 
 			Core* core_assigned = multicore->cores[top_node->core_assigned];
@@ -440,10 +445,14 @@ bool canScheduleStatic(DAG* node_graph){
 				if(child->remaining_predecessors == 0){
 					child->ready_time = end_time;
 					ready_queue.push(child);
+					// cout<<"in ready q: "<<child->id<<" ";
 				}
 			}
 			core_assigned->free_at = end_time;
 			free_cores.push_back(core_assigned);
+
+			// cout<<endl;
+			// cout<<" ready q size -- "<<ready_queue.size()<<" processing q size -- "<<processing_queue.size()<<endl;
 
 			// if processing queue has same end time for other nodes
 			// remove those nodes too 
@@ -452,32 +461,32 @@ bool canScheduleStatic(DAG* node_graph){
 				processing_queue.pop();
 			}
 			else break;
+			
 		}
 
 		// now assigning free cores to ready queue tasks
-		int i = 0;
-		while(!free_cores.empty() && !ready_queue.empty()){
-			Core* free_core = free_cores[i];
+		while(!ready_queue.empty()){
 			task* next_node = ready_queue.top();
-			double prob_start_time = max(next_node->ready_time, free_core->free_at);
-			double prob_end_time = next_node->start_time + next_node->worst_case_time;
-			if(prob_end_time > node_graph->deadline) {
-				i++;
-				if(i == free_cores.size()) return false;
+			for(int i=0; i<free_cores.size(); i++){
+				Core* free_core = free_cores[i];
+				double prob_start_time = max(next_node->ready_time, free_core->free_at);
+				double prob_end_time = prob_start_time + next_node->worst_case_time;
+				if(prob_end_time <= DEADLINE) {
+					next_node->core_assigned = free_core->id;
+					next_node->start_time = prob_start_time;
+					next_node->end_time = prob_end_time;
+					free_core->tasks.push_back(next_node);
+					ready_queue.pop();
+					processing_queue.push(next_node);
+					free_cores.erase(free_cores.begin()+i);
+					break;
+				}
+				else if(i==free_cores.size()-1) return false;
 			}
-			else{
-				next_node->core_assigned = free_core->id;
-				next_node->start_time = prob_start_time;
-				next_node->end_time = prob_end_time;
-				free_core->tasks.push_back(next_node);
-				ready_queue.pop();
-				processing_queue.push(next_node);
-				free_cores.erase(free_cores.begin()+i);
-				i = 0;
-			}
+			if(free_cores.size() == 0) break;
 		}
 	}
-
+	if(!ready_queue.empty()) return false;
 	return true;
 
 }
@@ -487,30 +496,38 @@ int numberOfRecoveriesStatic(DAG* dag){
 	int start =0;
 	int end = n;
 
-	int mid = start + (end-start)/2;
+	int mid;
 
 	while(end>=start){
-
-		mid = start + (end-start)/2;
+		mid = (start+end)/2;
 		DAG* new_dag_mid = getNewDAG(dag, mid);
 		bool can_schedule_new_dag_mid = canScheduleStatic(new_dag_mid);
-
-		
-		if((mid == n) && can_schedule_new_dag_mid)
-		{
-			return mid;
+		cout<<"start: "<<start<<" end: "<<end<<" mid: "<<mid<<endl;
+		if(start == end ) return start;
+		if(start == end - 1){
+			DAG* new_dag_end = getNewDAG(dag, end);
+			bool a = canScheduleStatic(new_dag_end);
+			if(a) return end;
+			else return start;
 		}
-		else if(can_schedule_new_dag_mid){
-
-			DAG* new_dag_next = getNewDAG(dag,mid+1);
-			bool can_schedule_new_dag_next = canScheduleStatic(new_dag_next);
-			if(!can_schedule_new_dag_next) return mid;
-			else start = mid+1;
-		}
+		if(can_schedule_new_dag_mid) start = mid;
 		else end=mid-1;
+		
+		// if((mid == n) && can_schedule_new_dag_mid)
+		// {
+		// 	return mid;
+		// }
+		// else if(can_schedule_new_dag_mid){
+
+		// 	DAG* new_dag_next = getNewDAG(dag,mid+1);
+		// 	bool can_schedule_new_dag_next = canScheduleStatic(new_dag_next);
+		// 	if(!can_schedule_new_dag_next) return mid;
+		// 	else start = mid+1;
+		// }
+		// else end=mid-1;
 	}
 
-	return 0;
+	return mid;
 }
 
 
@@ -702,9 +719,9 @@ int main(){
 
 	vector<string> files;
 	files.push_back("./BenchmarkDagsTXT/Montage_25.txt");
-	files.push_back("./BenchmarkDagsTXT/CyberShake_30.txt");
-	files.push_back("./BenchmarkDagsTXT/Inspiral_30.txt");
-	files.push_back("./BenchmarkDagsTXT/Sipht_30.txt");
+	// files.push_back("./BenchmarkDagsTXT/CyberShake_30.txt");
+	// files.push_back("./BenchmarkDagsTXT/Inspiral_30.txt");
+	// files.push_back("./BenchmarkDagsTXT/Sipht_30.txt");
 
 
 	cout<<"Name of file \t Rsys \n";
@@ -716,8 +733,6 @@ int main(){
 		multicore = new Multicore();
 		multicore->generateCores(NO_OF_CORES);
 
-		//dag->displayDAG();
-
 		// assign frequency
 		assign_freq(dag,2);
 
@@ -726,14 +741,42 @@ int main(){
 		for(auto node:dag->nodes){
 			total_time+=node->worst_case_time;
 		}
-		dag->deadline = 0.5*(total_time/(double)NO_OF_CORES);
+		dag->deadline = 1.5*(total_time/(double)NO_OF_CORES);
 		DEADLINE = dag->deadline;
-
+		cout<<DEADLINE<<endl;
 		//use algo
 		int no_of_recoveries = numberOfRecoveriesStatic(dag);
-		no_of_recoveries = 3;
+		cout<<" HERE "<<no_of_recoveries;
+		cout<<" HERE END"<<endl;
+		// dag->displayDAG();
 		DAG* new_dag = getNewDAG(dag,no_of_recoveries);
-		canScheduleStatic(new_dag);
+		// new_dag->displayDAG();
+		bool a = canScheduleStatic(new_dag);
+		cout<<endl<<endl;
+		cout<<"can schedule true or false -- "<<a<<endl;
+
+		for(task* node:new_dag->nodes){
+			cout<<" Node ID:"<<node->id;
+			cout<<" Core assigned:"<<node->core_assigned;
+			cout<<" Start time:"<<node->start_time;
+			cout<<" End time:"<<node->end_time;
+			cout<<endl;
+		}
+
+		cout<<endl<<endl;
+
+		for(Core* core: multicore->cores){
+			cout<<" Core ID:"<<core->id<<endl;
+			for(task*  node: core->tasks){
+				cout<<" Node ID:"<<node->id;
+				cout<<" Core assigned:"<<node->core_assigned;
+				cout<<" Start time:"<<node->start_time;
+				cout<<" End time:"<<node->end_time;
+				cout<<endl;
+			}
+			cout<<endl;
+		}
+
 		
 
 

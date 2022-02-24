@@ -154,7 +154,7 @@ void DAG::inputDAG(string filepath, int no_of_cores){
 	// have filepath as input
 
 	// cout<<"reading DAG from file "<<filepath<<"\n";
-
+	this->filesname = filepath;
 	fstream fin(filepath);
 	int no_of_jobs;
 	fin>>no_of_jobs;
@@ -195,15 +195,37 @@ void DAG::inputDAG(string filepath, int no_of_cores){
 void DAG::displayDAG(){
 	cout<<"Nodes == Tasks are as follows\n";
 
-	for(auto l:nodes){
+	for(task*  l:nodes){
 		cout<<"Task id : "<<l->id<<" wc time : "<<l->worst_case_time<<" core_assigned : "<<l->core_assigned<<" \n";
-	}
+		cout<<"Predecessors : ";
+		for(task* node: l->predecessors){
+			cout<<node->id<<" ";
+		}
+		cout<<endl;
 
-	cout<<"Following are the edges : \n";
-
-	for(auto l:edges){
-		cout<<" from Task "<<l->src->id<<" to Task "<<l->dest->id<<" \n";
+		cout<<"Successors : ";
+		for(task* node: l->successors){
+			cout<<node->id<<" ";
+		}
+		cout<<endl;
 	}
 
 	cout<<"END OF GRAPH\n";
+}
+
+void DAG::CopyDAG(DAG* new_dag){
+	new_dag->deadline =  this->deadline;
+	new_dag->ventry_id = this->ventry_id;
+	new_dag->vexit_id = this->vexit_id;
+	for(task* node: this->nodes){
+		task* new_node = new task();
+		*new_node = *node;
+		new_dag->nodes.push_back(new_node);
+	}
+
+	for(edge* edgee: this->edges){
+		edge* new_edge = new edge();
+		*new_edge = *edgee;
+		new_dag->edges.push_back(new_edge);
+	}
 }
