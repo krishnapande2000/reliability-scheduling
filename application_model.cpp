@@ -162,7 +162,7 @@ void DAG::inputDAG(string filepath, int no_of_cores){
 	for(int i=0;i<no_of_jobs;i++){
 
 		task* newTask = new task();
-		newTask->id = i;
+		newTask->id = i+1;
 		newTask->worst_case_time = rand()%(100-10 + 1) + 10;
 		newTask->core_assigned = rand()%no_of_cores;
 
