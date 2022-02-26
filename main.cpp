@@ -406,8 +406,6 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 
 bool canScheduleStatic(DAG* node_graph){
 	multicore->clear_cores();
-
-
 	vector<Core*> free_cores;
 	for(auto core:multicore->cores){
 		free_cores.push_back(core);
@@ -530,7 +528,96 @@ int numberOfRecoveriesStatic(DAG* dag){
 	return mid;
 }
 
+struct CompDynamicEndTime{
+	bool operator()(task* i,task* j){
+	return i->dynamic_process_end_time > j->dynamic_process_end_time;
+	}
+};
 
+double dynamicScaleFrequency(task* node){
+	double time_available = node->end_time - node->dynamic_process_start_time;
+	double freq_factor = 1.0 ;
+	double max_freq = multicore->freq_levels[multicore->freq_levels.size()-1];
+	for(int i = multicore->freq_levels.size()-2; i>=0; i--){
+		if(node->worst_case_time * (max_freq/multicore->freq_levels[i]) <= time_available 
+		&& systemLifetimeReliability(multicore) < LIFETIME_THRESHOLD){
+			freq_factor = max_freq/multicore->freq_levels[i];
+			node->freq_assigned = 0.99 / freq_factor;
+		}
+		else break;
+	}
+	node->freq_assigned = 0.99 / freq_factor;
+	return freq_factor;
+}
+
+void executeTask(task* node, double freq_factor){
+	double factor = (double)rand() / (double) RAND_MAX;
+	if(factor<0.5) factor+=0.5;
+	if(factor>0.9) {
+		factor -= (double)(rand() % 4) / 10.0 - 0.1;
+	}
+	node->execution_time = node->worst_case_time * factor * freq_factor;
+	node->dynamic_process_end_time = node->dynamic_process_start_time + node->execution_time;
+}
+
+void scheduleDynamic(DAG* node_graph){
+	for(Core* core:multicore->cores){
+		core->free_at = 0;
+		for(task* node: core->tasks){
+			core->static_tasks_assigned.push(node);
+		}
+	}
+
+	for(task* node : node_graph->nodes){
+		node->dynamic_process_start_time = -1.0;
+		node->dynamic_process_end_time = -1.0;
+		node->dynamic_ready_time = -1.0;
+		node->remaining_predecessors = node->predecessors.size();
+	}
+	
+	node_graph->nodes[node_graph->ventry_id]->dynamic_process_end_time = 0.0;
+	node_graph->nodes[node_graph->ventry_id]->dynamic_process_start_time = 0.0;
+
+	priority_queue<task*, vector<task*>,CompDynamicEndTime> processing_queue;
+	processing_queue.push(node_graph->nodes[node_graph->ventry_id]);
+	while(!processing_queue.empty()){
+		task* node = processing_queue.top();
+		processing_queue.pop();
+		double curr_time = node->dynamic_process_end_time;
+
+		Core* core_assigned_to_node = multicore->cores[node->core_assigned];
+		core_assigned_to_node->free_at = curr_time;
+		core_assigned_to_node->static_tasks_assigned.pop();
+
+		// next task in the core already ready to be executed now
+		if(!core_assigned_to_node->static_tasks_assigned.empty()){
+			task* core_top_node = core_assigned_to_node->static_tasks_assigned.front();
+			if(core_top_node->dynamic_ready_time != -1.0){
+				core_top_node->dynamic_process_start_time = curr_time;
+				processing_queue.push(core_top_node);
+				// frequency scale 
+				double freq_factor = dynamicScaleFrequency(core_top_node);
+				executeTask(core_top_node, freq_factor);
+			}
+		}
+
+		for(task* child : node->successors){
+			child->remaining_predecessors --;
+			if(child->remaining_predecessors == 0){
+				Core* child_core = multicore->cores[child->core_assigned];
+				child->dynamic_ready_time = curr_time;
+				if(child_core->static_tasks_assigned.front()==child){
+					child->dynamic_process_start_time = curr_time;
+					processing_queue.push(child);
+					// frequency scale 
+					double freq_factor = dynamicScaleFrequency(child);
+					executeTask(child, freq_factor);
+				}
+			}
+		}
+
+	}
+}
 
 
 //****sem8
@@ -776,9 +863,17 @@ int main(){
 			}
 			cout<<endl;
 		}
+		cout<<endl<<endl<<"DYNAMIC----"<<endl<<endl;
+		scheduleDynamic(new_dag);
 
-		
-
+		for(task* node:new_dag->nodes){
+			cout<<" Node ID:"<<node->id;
+			cout<<" Core assigned:"<<node->core_assigned;
+			cout<<" Start time:"<<node->start_time;
+			cout<<" End time:"<<node->end_time;
+			cout<<" Frequency Assigned:"<<node->freq_assigned;
+			cout<<endl;
+		}
 
 		double Rsys = systemReliability(new_dag);
 

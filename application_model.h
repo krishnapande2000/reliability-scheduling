@@ -81,6 +81,7 @@ struct task{
 	double execution_time;
 	double dynamic_ready_time;
 	double dynamic_process_start_time;
+	double dynamic_process_end_time;
 
 	int vexit_dist;
 	int remaining_predecessors;
