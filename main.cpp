@@ -65,7 +65,7 @@
 #include "system_model.h"
 using namespace std;
 
-int NO_OF_CORES = 3;
+int NO_OF_CORES = 4;
 
 int NO_OF_TASKS = 50;
 
@@ -73,13 +73,19 @@ double DEADLINE = 0.0;
 
 double LIFETIME_THRESHOLD = 40;
 
+double WC_ADJ_FACTOR = 1;
+
+bool SHORTEST_JOB_FIRST = true;
+
+double RO = 1e-6;
+
 Multicore* multicore;
 
 
 //**********calc start**************************************************************************************************88
 
 double taskReliability(task* t, Core* c){
-	double ro = c->ro;
+	double ro = RO;
 	double w = c->hardware_coefficient;
 	double Fmin = c->Fmin;
 	double Fmax = c->Fmax;
@@ -88,9 +94,9 @@ double taskReliability(task* t, Core* c){
 	double freq = t->freq_assigned;
 
 	double rf = ro*(pow(10,(w*(1-freq))/(1-Fmin)));
-	double Ri = exp((-1)*(rf*wc)/freq);
+	double Ri = exp((-1)*(rf*wc));
 
-	//cout<<" task id "<<t->id<<" Ri : "<<Ri<<" \n";
+	// cout<<" task id "<<t->id<<" Ri : "<<Ri<<" \n";
 
 	return Ri;
 }
@@ -170,16 +176,15 @@ double taskPreci(Core* c,int i){
 	*PMil = 0;
 	PrecHelper(c,0,0,i,PMil);
 
-	// cout<<" Task id "<<c->tasks[i]->id<<" Pmil: "<<*PMil<<" * RiFmax : "<<RiFmax<<"\n";
 	return RiFmax*(*PMil);
 }
 
 double systemReliability(DAG* dag){
 
 	double Rsys = 1;
-	for(auto task : dag->nodes){
+	for(int i=1;i<=NO_OF_TASKS;i++){
 
-		if(task->id == dag->ventry_id || task->id==dag->vexit_id)continue;
+		task* task = dag->nodes[i];
 		Core* core = multicore->cores[task->core_assigned];
 		double Ri = taskReliability(task,core);
 		double Rreci = Ri;
@@ -188,9 +193,6 @@ double systemReliability(DAG* dag){
 		}
 
 		Rsys*=Rreci;
-
-		// cout<<"Task id : "<<task->id<<" Ri :"<<Ri<<" Preci :"<<Preci<<" Rreci : "<<Rreci<<"Rsys : "<<Rsys<<" \n";
-
 	}
 	
 	return Rsys;
@@ -218,6 +220,15 @@ double systemLifetimeReliability(Multicore* multicore){
 	return MTTFsys;
 }
 
+double power(task* t, Core* c){
+
+	double a = 1;
+	double C = 2;
+	double V = 220;
+	double freq_assigned = t->freq_assigned*(2.25) //this is Ghz manage variables as per that
+	double p = a*C*V*V*f;
+	return p;
+}
 //**********calc end**************************************************************************************************88
 
 
@@ -272,6 +283,7 @@ struct CompVexitDistance{
 };
 
 bool compWorstCaseTime(task* i,task* j){
+	if(SHORTEST_JOB_FIRST) return i->worst_case_time < j->worst_case_time;
 	return i->worst_case_time > j->worst_case_time;
 }
 
@@ -470,7 +482,7 @@ bool canScheduleStatic(DAG* node_graph){
 			for(int i=0; i<free_cores.size(); i++){
 				Core* free_core = free_cores[i];
 				double prob_start_time = max(next_node->ready_time, free_core->free_at);
-				double prob_end_time = prob_start_time + next_node->worst_case_time;
+				double prob_end_time = prob_start_time + WC_ADJ_FACTOR*(next_node->worst_case_time);
 				if(prob_end_time <= DEADLINE) {
 					next_node->core_assigned = free_core->id;
 					next_node->start_time = prob_start_time;
@@ -502,7 +514,7 @@ int numberOfRecoveriesStatic(DAG* dag){
 		mid = (start+end)/2;
 		DAG* new_dag_mid = getNewDAG(dag, mid);
 		bool can_schedule_new_dag_mid = canScheduleStatic(new_dag_mid);
-		cout<<"start: "<<start<<" end: "<<end<<" mid: "<<mid<<endl;
+		// cout<<"start: "<<start<<" end: "<<end<<" mid: "<<mid<<endl;
 		if(start == end ) return start;
 		if(start == end - 1){
 			DAG* new_dag_end = getNewDAG(dag, end);
@@ -513,18 +525,6 @@ int numberOfRecoveriesStatic(DAG* dag){
 		if(can_schedule_new_dag_mid) start = mid;
 		else end=mid-1;
 		
-		// if((mid == n) && can_schedule_new_dag_mid)
-		// {
-		// 	return mid;
-		// }
-		// else if(can_schedule_new_dag_mid){
-
-		// 	DAG* new_dag_next = getNewDAG(dag,mid+1);
-		// 	bool can_schedule_new_dag_next = canScheduleStatic(new_dag_next);
-		// 	if(!can_schedule_new_dag_next) return mid;
-		// 	else start = mid+1;
-		// }
-		// else end=mid-1;
 	}
 
 	return mid;
@@ -704,8 +704,113 @@ bool hasMTTF(Multicore* multicore){
 
 //**********constraint checks end**************************************************************************************************88
 
+//converts a given line string to a vector of words seperated as per spaces
+//extra spaces are skipped
+vector<string> line_to_words(string str) 
+{ 
+    // Used to split string around spaces. 
+    vector<string> res;
+    istringstream ss(str); 
+
+    string word; // for storing each word 
+  
+    // Traverse through all words 
+    // while loop till we get  
+    // strings to store in string word 
+    while (ss >> word)  
+    { 
+    	res.push_back(word);
+        //push the read word       
+    } 
+    return res;
+}
+
+int executor(string config_filename){
+
+	ifstream input_file;
+	input_file.open(config_filename);
+
+	string output_filename = "./OUTPUTS/output_" + config_filename;
+	ofstream output_file;
+	output_file.open(output_filename);
+
+	string line="";
+	int i=1;
+
+	while(getline(input_file,line,'\n'))
+	{
+		vector<string> line_w=line_to_words(line);
+		NO_OF_CORES = stoi(line_w[0]);
+		WC_ADJ_FACTOR = stof(line_w[1]);
+		SHORTEST_JOB_FIRST = stoi(line_w[2]);
+		RO = stof(line_w[3]);
+
+		output_file<<" CONFIG NUMBER : "<<i<<" \n";
+		output_file<<line<<endl;
+
+		string benchmark_folder = "./BenchmarkDagsTXT/";
+
+		vector<string> files;
+		files.push_back("Montage_25.txt");
+		files.push_back("Montage_50.txt");
+		files.push_back("CyberShake_30.txt");
+		files.push_back("CyberShake_50.txt");
+		files.push_back("Inspiral_30.txt");
+		files.push_back("Inspiral_50.txt");
+		files.push_back("Sipht_30.txt");
+		files.push_back("Sipht_60.txt");
+
+		for(auto filename : files){
+
+			DAG* dag = new DAG();
+			string filepath = benchmark_folder+filename;
+			dag->inputDAG(filepath,NO_OF_CORES);
+			NO_OF_TASKS = dag->nodes.size();
+
+			multicore = new Multicore();
+			multicore->generateCores(NO_OF_CORES);
+
+			// assign frequency
+			assign_freq(dag,2);
+
+			// create a reasonable deadline
+			double total_time = 0;
+			for(auto node:dag->nodes){
+				total_time+=node->worst_case_time;
+			}
+			dag->deadline = 2.25*(total_time/(double)NO_OF_CORES);
+			DEADLINE = dag->deadline;
+			
+			//use algo
+			int no_of_recoveries = numberOfRecoveriesStatic(dag);
+			DAG* new_dag = getNewDAG(dag,no_of_recoveries);
+		    canScheduleStatic(new_dag);
+
+			assign_freq(new_dag,2);
+
+			double Rsys = systemReliability(new_dag);
+			double PoF = 1 - Rsys;
+
+			//print reliability
+			 output_file<<filename<<"\t"<<no_of_recoveries<<"\t"<<Rsys<<"\t"<<PoF<<endl;
+
+		}
+
+		i++;
+		output_file<<"---------------------------------------------------------\n\n";
+	}
+
+	output_file.close();
+	input_file.close();
+
+}
+
+
 int main(){
 
+	string config_filename;
+	cin>>config_filename;
+	executor(config_filename);
 	
 	// applying algo to assign recoveries :
 
@@ -716,12 +821,12 @@ int main(){
 	//for each file we create a DAG
 	//run that DAG for each algo and get results
 	// print the name and result from each algo
+	ofstream output_file;
+	output_file.open("output.txt");
+	// output_file.open();
 
 	vector<string> files;
 	files.push_back("./BenchmarkDagsTXT/Montage_25.txt");
-	// files.push_back("./BenchmarkDagsTXT/CyberShake_30.txt");
-	// files.push_back("./BenchmarkDagsTXT/Inspiral_30.txt");
-	// files.push_back("./BenchmarkDagsTXT/Sipht_30.txt");
 
 
 	cout<<"Name of file \t Rsys \n";
@@ -729,6 +834,7 @@ int main(){
 	for(auto filepath : files){
 		DAG* dag = new DAG();
 		dag->inputDAG(filepath,NO_OF_CORES);
+		NO_OF_TASKS = dag->nodes.size();
 
 		multicore = new Multicore();
 		multicore->generateCores(NO_OF_CORES);
@@ -741,7 +847,7 @@ int main(){
 		for(auto node:dag->nodes){
 			total_time+=node->worst_case_time;
 		}
-		dag->deadline = 1.5*(total_time/(double)NO_OF_CORES);
+		dag->deadline = 2.25*(total_time/(double)NO_OF_CORES);
 		DEADLINE = dag->deadline;
 		cout<<DEADLINE<<endl;
 		//use algo
@@ -755,41 +861,42 @@ int main(){
 		cout<<endl<<endl;
 		cout<<"can schedule true or false -- "<<a<<endl;
 
-		for(task* node:new_dag->nodes){
-			cout<<" Node ID:"<<node->id;
-			cout<<" Core assigned:"<<node->core_assigned;
-			cout<<" Start time:"<<node->start_time;
-			cout<<" End time:"<<node->end_time;
-			cout<<endl;
-		}
+		// for(task* node:new_dag->nodes){
+		// 	cout<<" Node ID:"<<node->id;
+		// 	cout<<" Core assigned:"<<node->core_assigned;
+		// 	cout<<" Start time:"<<node->start_time;
+		// 	cout<<" End time:"<<node->end_time;
+		// 	cout<<endl;
+		// }
 
-		cout<<endl<<endl;
+		// cout<<endl<<endl;
 
-		for(Core* core: multicore->cores){
-			cout<<" Core ID:"<<core->id<<endl;
-			for(task*  node: core->tasks){
-				cout<<" Node ID:"<<node->id;
-				cout<<" Core assigned:"<<node->core_assigned;
-				cout<<" Start time:"<<node->start_time;
-				cout<<" End time:"<<node->end_time;
-				cout<<endl;
-			}
-			cout<<endl;
-		}
+		// for(Core* core: multicore->cores){
+		// 	cout<<" Core ID:"<<core->id<<endl;
+		// 	for(task*  node: core->tasks){
+		// 		cout<<" Node ID:"<<node->id;
+		// 		cout<<" Core assigned:"<<node->core_assigned;
+		// 		cout<<" Start time:"<<node->start_time;
+		// 		cout<<" End time:"<<node->end_time;
+		// 		cout<<endl;
+		// 	}
+		// 	cout<<endl;
+		// }
 
 		
-
+		assign_freq(new_dag,2);
 
 		double Rsys = systemReliability(new_dag);
 
 
 		//print reliability
 		 cout<<filepath<<"\t"<<Rsys<<"\t"<<endl;
-
+		 output_file << Rsys<<endl;
 
 
 	}
 
+	output_file.close();
 	return 0;
 
 }
