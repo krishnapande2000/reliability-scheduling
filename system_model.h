@@ -64,7 +64,6 @@ struct Core{
 	double hardware_coefficient;
 	double aging_rate;
 	double weibull_alpha;
-	vector<double> freq_levels;
 	double Fmax;
 	double Fmin;
 	double ro;
@@ -80,7 +79,7 @@ struct Core{
 class Multicore{
 public:
 	vector<Core*> cores;
-
+	vector<double> freq_levels;
 	Multicore();
 
 	void generateCores(int no_of_cores);

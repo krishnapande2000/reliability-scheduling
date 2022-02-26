@@ -82,7 +82,12 @@ double aging_rate;
 */
 
 Multicore::Multicore(){
-
+	freq_levels.push_back(1.0);
+	freq_levels.push_back(1.25);
+	freq_levels.push_back(1.5);
+	freq_levels.push_back(1.75);
+	freq_levels.push_back(2.0);
+	freq_levels.push_back(2.25);
 }
 
 void Multicore::generateCores(int no_of_cores){
@@ -96,8 +101,7 @@ void Multicore::generateCores(int no_of_cores){
 		newCore->Fmin = 0.33;
 		newCore->ro = 1e-5;
 		newCore->id = i;
-		newCore->free_at = INT_MAX;
-
+		newCore->free_at = 0;
 		cores.push_back(newCore);
 
 	}
