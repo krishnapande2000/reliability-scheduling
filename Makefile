@@ -19,4 +19,4 @@ application_model.o: application_model.cpp application_model.h
 	$(CC) -c application_model.cpp application_model.h 
 
 clean:
-	@rm -f $(OBJECT)  *.o
+	@rm -f $(OBJECT)  *.o *.gch
