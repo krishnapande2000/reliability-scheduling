@@ -98,7 +98,7 @@ void Multicore::generateCores(int no_of_cores){
 		newCore->aging_rate = generateRand1(45,5);
 		newCore->weibull_alpha = generateRand1(60,10);
 		newCore->Fmax = 0.99;
-		newCore->Fmin = 0.01;
+		newCore->Fmin = 0.33;
 		newCore->ro = 1e-5;
 		newCore->id = i;
 		newCore->free_at = 0;
