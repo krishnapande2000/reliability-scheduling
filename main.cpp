@@ -71,7 +71,7 @@ int NO_OF_TASKS = 50;
 
 double DEADLINE = 0.0;
 
-double LIFETIME_THRESHOLD = 40;
+double LIFETIME_THRESHOLD = 60;
 
 Multicore* multicore;
 
@@ -202,7 +202,7 @@ double lifetimeReliability(task* t,Core* c){
 	double MTTF = constant_a / (freq-0.1); //freq in ghz please (10^9) 
 	//TO-DO(niyatic): multiply by root Ao.
 
-	cout<<"freq "<<freq<<" mttf: "<<MTTF<<" \n";
+	// cout<<"freq "<<freq<<" mttf: "<<MTTF<<" \n";
 	return MTTF;
 	
 }
@@ -420,13 +420,12 @@ bool canScheduleStatic(DAG* node_graph){
 		node->core_assigned = 0;
 	}
 	// cout<<free_cores.size()<<endl;
-
+	free_cores.back()->tasks.push_back(node_graph->nodes[node_graph->ventry_id]);
 	node_graph->nodes[node_graph->ventry_id]->core_assigned = free_cores.back()->id;
 	free_cores.pop_back();
 
 	// cout<<node_graph->nodes[node_graph->ventry_id]->core_assigned<<" free core size - "<<free_cores.size()<<endl;
 	processing_queue.push(node_graph->nodes[node_graph->ventry_id]);
-
 
 
 	while (!processing_queue.empty()){
@@ -446,6 +445,7 @@ bool canScheduleStatic(DAG* node_graph){
 					// cout<<"in ready q: "<<child->id<<" ";
 				}
 			}
+			
 			core_assigned->free_at = end_time;
 			free_cores.push_back(core_assigned);
 
@@ -563,8 +563,11 @@ void executeTask(task* node, double freq_factor){
 void scheduleDynamic(DAG* node_graph){
 	for(Core* core:multicore->cores){
 		core->free_at = 0;
+		cout<<endl<<"CORE ID"<<core->id<<endl;
 		for(task* node: core->tasks){
 			core->static_tasks_assigned.push(node);
+			cout<<node->id<<" ";
+
 		}
 	}
 
@@ -588,10 +591,11 @@ void scheduleDynamic(DAG* node_graph){
 		Core* core_assigned_to_node = multicore->cores[node->core_assigned];
 		core_assigned_to_node->free_at = curr_time;
 		core_assigned_to_node->static_tasks_assigned.pop();
-
+		cout<<"process pop - "<<node->id<<endl;
 		// next task in the core already ready to be executed now
 		if(!core_assigned_to_node->static_tasks_assigned.empty()){
 			task* core_top_node = core_assigned_to_node->static_tasks_assigned.front();
+			cout<<"core front - "<<core_top_node->id<<endl;
 			if(core_top_node->dynamic_ready_time != -1.0){
 				core_top_node->dynamic_process_start_time = curr_time;
 				processing_queue.push(core_top_node);
@@ -606,6 +610,8 @@ void scheduleDynamic(DAG* node_graph){
 			if(child->remaining_predecessors == 0){
 				Core* child_core = multicore->cores[child->core_assigned];
 				child->dynamic_ready_time = curr_time;
+				cout<<"child pred 0 - "<<child_core->id<<endl;
+				cout<<"child core front -- "<<child_core->static_tasks_assigned.front();
 				if(child_core->static_tasks_assigned.front()==child){
 					child->dynamic_process_start_time = curr_time;
 					processing_queue.push(child);
@@ -838,6 +844,7 @@ int main(){
 		// dag->displayDAG();
 		DAG* new_dag = getNewDAG(dag,no_of_recoveries);
 		// new_dag->displayDAG();
+		assign_freq(new_dag,1);
 		bool a = canScheduleStatic(new_dag);
 		cout<<endl<<endl;
 		cout<<"can schedule true or false -- "<<a<<endl;
@@ -847,30 +854,31 @@ int main(){
 			cout<<" Core assigned:"<<node->core_assigned;
 			cout<<" Start time:"<<node->start_time;
 			cout<<" End time:"<<node->end_time;
+			cout<<" Frequency Assigned:"<<node->freq_assigned;
 			cout<<endl;
 		}
 
 		cout<<endl<<endl;
 
-		for(Core* core: multicore->cores){
-			cout<<" Core ID:"<<core->id<<endl;
-			for(task*  node: core->tasks){
-				cout<<" Node ID:"<<node->id;
-				cout<<" Core assigned:"<<node->core_assigned;
-				cout<<" Start time:"<<node->start_time;
-				cout<<" End time:"<<node->end_time;
-				cout<<endl;
-			}
-			cout<<endl;
-		}
+		// for(Core* core: multicore->cores){
+		// 	cout<<" Core ID:"<<core->id<<endl;
+		// 	for(task*  node: core->tasks){
+		// 		cout<<" Node ID:"<<node->id;
+		// 		cout<<" Core assigned:"<<node->core_assigned;
+		// 		cout<<" Start time:"<<node->dynamic_process_start_time;
+		// 		cout<<" End time:"<<node->dynamic_process_end_time;
+		// 		cout<<endl;
+		// 	}
+		// 	cout<<endl;
+		// }
 		cout<<endl<<endl<<"DYNAMIC----"<<endl<<endl;
 		scheduleDynamic(new_dag);
 
 		for(task* node:new_dag->nodes){
 			cout<<" Node ID:"<<node->id;
 			cout<<" Core assigned:"<<node->core_assigned;
-			cout<<" Start time:"<<node->start_time;
-			cout<<" End time:"<<node->end_time;
+			cout<<" Start time:"<<node->dynamic_process_start_time;
+			cout<<" End time:"<<node->dynamic_process_end_time;
 			cout<<" Frequency Assigned:"<<node->freq_assigned;
 			cout<<endl;
 		}
