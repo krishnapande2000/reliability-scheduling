@@ -198,6 +198,25 @@ double systemReliability(DAG* dag){
 	return Rsys;
 }
 
+double systemReliability_dynamic(DAG* dag){
+
+	double Rsys = 1;
+	for(int i=1;i<=NO_OF_TASKS;i++){
+
+		task* task = dag->nodes[i];
+		Core* core = multicore->cores[task->core_assigned];
+		double Ri = taskReliability_dynamic(task,core);
+		double Rreci = Ri;
+		if(task->recovery_assigned){
+			Rreci = 1.0 - (1.0-Ri)*(1.0-Ri);
+		}
+
+		Rsys*=Rreci;
+	}
+	
+	return Rsys;
+}
+
 double lifetimeReliability(task* t,Core* c){
 	double constant_a = 38.92;
 	double freq = t->freq_assigned;
