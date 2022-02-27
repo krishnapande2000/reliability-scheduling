@@ -576,10 +576,8 @@ void executeTask(task* node, double freq_factor){
 void scheduleDynamic(DAG* node_graph){
 	for(Core* core:multicore->cores){
 		core->free_at = 0;
-		cout<<endl<<"CORE ID"<<core->id<<endl;
 		for(task* node: core->tasks){
 			core->static_tasks_assigned.push(node);
-			cout<<node->id<<" ";
 
 		}
 	}
@@ -604,11 +602,9 @@ void scheduleDynamic(DAG* node_graph){
 		Core* core_assigned_to_node = multicore->cores[node->core_assigned];
 		core_assigned_to_node->free_at = curr_time;
 		core_assigned_to_node->static_tasks_assigned.pop();
-		cout<<"process pop - "<<node->id<<endl;
 		// next task in the core already ready to be executed now
 		if(!core_assigned_to_node->static_tasks_assigned.empty()){
 			task* core_top_node = core_assigned_to_node->static_tasks_assigned.front();
-			cout<<"core front - "<<core_top_node->id<<endl;
 			if(core_top_node->dynamic_ready_time != -1.0){
 				core_top_node->dynamic_process_start_time = curr_time;
 				processing_queue.push(core_top_node);
@@ -623,8 +619,6 @@ void scheduleDynamic(DAG* node_graph){
 			if(child->remaining_predecessors == 0){
 				Core* child_core = multicore->cores[child->core_assigned];
 				child->dynamic_ready_time = curr_time;
-				cout<<"child pred 0 - "<<child_core->id<<endl;
-				cout<<"child core front -- "<<child_core->static_tasks_assigned.front();
 				if(child_core->static_tasks_assigned.front()==child){
 					child->dynamic_process_start_time = curr_time;
 					processing_queue.push(child);
@@ -802,12 +796,18 @@ vector<string> line_to_words(string str)
 int executor(string config_filename){
 
 	ifstream input_file;
-	string config_filepath = "./INPUTS/" + config_filename;
+	string config_filepath = "./INPUTS/" + config_filename + ".txt";
 	input_file.open(config_filepath);
 
-	string output_filename = "./OUTPUTS/output_" + config_filename;
+	string output_filename = "./OUTPUTS/output_" + config_filename + ".txt";
 	ofstream output_file;
 	output_file.open(output_filename);
+
+	string csv_output_filename = "./OUTPUTS/output_" + config_filename + ".csv";
+	ofstream csv_output_file;
+	csv_output_file.open(csv_output_filename);
+
+	csv_output_file<<"Name of file,No of recoveries,Rsys_static,PoF_static,Rsys_dynamic,PoF_dynamic\n";
 
 	string line="";
 	int i=1;
@@ -822,6 +822,9 @@ int executor(string config_filename){
 
 		output_file<<" CONFIG NUMBER : "<<i<<" \n";
 		output_file<<line<<endl;
+
+		csv_output_file<<"Config Number,"<<i<<"\n";
+		csv_output_file<<NO_OF_CORES<<","<<WC_ADJ_FACTOR<<","<<SHORTEST_JOB_FIRST<<","<<RO<<"\n";
 
 		string benchmark_folder = "./BenchmarkDagsTXT/";
 
@@ -853,7 +856,7 @@ int executor(string config_filename){
 			for(auto node:dag->nodes){
 				total_time+=node->worst_case_time;
 			}
-			dag->deadline = 2.25*(total_time/(double)NO_OF_CORES);
+			dag->deadline = 1.75*(total_time/(double)NO_OF_CORES);
 			DEADLINE = dag->deadline;
 			
 			//use algo
@@ -864,18 +867,20 @@ int executor(string config_filename){
 			assign_freq(new_dag,2);
 
 			double Rsys_static = systemReliability(new_dag);
-			double PoF = 1 - Rsys_static;
+			double PoF_static = 1 - Rsys_static;
 
 			scheduleDynamic(new_dag);
 			double Rsys_dynamic = systemReliability_dynamic(new_dag);
+			double PoF_dynamic = 1 - Rsys_dynamic;
 
 			//print reliability
-			 output_file<<setw(7)<<filename<<setw(8)<<no_of_recoveries<<"\t"<<Rsys_static<<"\t"<<Rsys_dynamic<<"\t"<<PoF<<endl;
-
+			 output_file<<setw(7)<<filename<<setw(8)<<no_of_recoveries<<"\t"<<Rsys_static<<"\t"<<Rsys_dynamic<<"\t"<<PoF_dynamic<<endl;
+			 csv_output_file<<filename<<","<<no_of_recoveries<<","<<Rsys_static<<","<<PoF_static<<","<<Rsys_dynamic<<","<<PoF_dynamic<<"\n";
 		}
 
 		i++;
 		output_file<<"---------------------------------------------------------\n\n";
+		csv_output_file<<"\n\n";
 	}
 
 	output_file.close();
@@ -914,7 +919,7 @@ int main(){
 		for(auto node:dag->nodes){
 			total_time+=node->worst_case_time;
 		}
-		dag->deadline = 2*(total_time/(double)NO_OF_CORES);
+		dag->deadline = 2.25*(total_time/(double)NO_OF_CORES);
 		DEADLINE = dag->deadline;
 		cout<<DEADLINE<<endl;
 		//use algo
@@ -967,6 +972,7 @@ int main(){
 
 
 		//print reliability
+		cout<<hasMTTF(multicore)<<"this is mttf check\n";
 		 cout<<filepath<<"\t"<<Rsys<<"\t"<<endl;
 
 
