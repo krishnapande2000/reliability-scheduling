@@ -1,9 +1,0 @@
- CONFIG NUMBER : 1 
-4 1 1 1e-6
-./BenchmarkDagsTXT/Montage_25.txt 16 0.981515 0.0184848
- CONFIG NUMBER : 2 
-4 0.8 1 1e-6
-./BenchmarkDagsTXT/Montage_25.txt 25 0.979906 0.0200939
- CONFIG NUMBER : 3 
-5 1 1 1e-6
-./BenchmarkDagsTXT/Montage_25.txt 18 0.864512 0.135488
