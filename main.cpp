@@ -244,8 +244,8 @@ double power(task* t, Core* c){
 	double a = 1;
 	double C = 2;
 	double V = 220;
-	double freq_assigned = t->freq_assigned*(2.25) //this is Ghz manage variables as per that
-	double p = a*C*V*V*f;
+	double freq_assigned = t->freq_assigned*(2.25); //this is Ghz manage variables as per that
+	double p = a*C*V*V*freq_assigned;
 	return p;
 }
 //**********calc end**************************************************************************************************88
