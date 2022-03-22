@@ -308,23 +308,16 @@ bool compWorstCaseTime(task* i,task* j){
 	return i->worst_case_time > j->worst_case_time;
 }
 
-// void topologicalSortUtil(DAG* dag,int v, vector<bool>& visited,stack<task*>& topo_stack)
-// {
-// 	  // Mark the current node as visited
-// 	  visited[v] = true;
-// 	  task* nodev = dag->nodes[v];
-// 	  // Recur for all the vertices adjacent to this vertex
-// 	  for (auto pred:nodev->predecessors) {
-// 	    if (!visited[pred->id])
-// 	      topologicalSortUtil(dag,pred->id, visited, topo_stack);
-// 	  }
+struct CompDynamicEndTime{
+	bool operator()(task* i,task* j){
+	return i->dynamic_process_end_time > j->dynamic_process_end_time;
+	}
+};
 
-// 	  // Push current vertex to stack which stores topological
-// 	  // sort
-	  
-// 	  topo_stack.push(nodev);
-// }
 
+//as the tasks are already topologically sorted
+//this function uses the order to calculate 
+// dist from vexit for every node
 void longestDistVexit(DAG* dag)
 {
     stack<task*> topo_stack;
@@ -437,6 +430,10 @@ DAG* getNewDAG(DAG* dag){
 	return new_dag;
 }
 
+
+//checks if given DAG can be scheduled within deadline
+// assigns tasks to cores if possible
+// also assigns start and end time for each task
 bool canScheduleStatic(DAG* node_graph){
 	multicore->clear_cores();
 	vector<Core*> free_cores;
@@ -522,6 +519,7 @@ bool canScheduleStatic(DAG* node_graph){
 
 }
 
+//returns max no of recoveries possible 
 int numberOfRecoveriesStatic(DAG* dag){
 	int n = dag->nodes.size();
 	int start =0;
@@ -548,12 +546,6 @@ int numberOfRecoveriesStatic(DAG* dag){
 
 	return mid;
 }
-
-struct CompDynamicEndTime{
-	bool operator()(task* i,task* j){
-	return i->dynamic_process_end_time > j->dynamic_process_end_time;
-	}
-};
 
 double dynamicScaleFrequency(task* node){
 	double time_available = node->end_time - node->dynamic_process_start_time;
@@ -593,13 +585,13 @@ void executeTask(task* node, double freq_factor){
 	node->dynamic_process_end_time = node->dynamic_process_start_time + node->execution_time;
 }
 
+// scales the frequency of all tasks to adjust as per MTTF
+// dynamically at run time using the schedule created by static
 void scheduleDynamic(DAG* node_graph){
 	for(Core* core:multicore->cores){
 		core->free_at = 0;
-		cout<<endl<<"CORE ID"<<core->id<<endl;
 		for(task* node: core->tasks){
 			core->static_tasks_assigned.push(node);
-			cout<<node->id<<" ";
 
 		}
 	}
@@ -624,11 +616,9 @@ void scheduleDynamic(DAG* node_graph){
 		Core* core_assigned_to_node = multicore->cores[node->core_assigned];
 		core_assigned_to_node->free_at = curr_time;
 		core_assigned_to_node->static_tasks_assigned.pop();
-		cout<<"process pop - "<<node->id<<endl;
 		// next task in the core already ready to be executed now
 		if(!core_assigned_to_node->static_tasks_assigned.empty()){
 			task* core_top_node = core_assigned_to_node->static_tasks_assigned.front();
-			cout<<"core front - "<<core_top_node->id<<endl;
 			if(core_top_node->dynamic_ready_time != -1.0){
 				core_top_node->dynamic_process_start_time = curr_time;
 				processing_queue.push(core_top_node);
@@ -643,8 +633,6 @@ void scheduleDynamic(DAG* node_graph){
 			if(child->remaining_predecessors == 0){
 				Core* child_core = multicore->cores[child->core_assigned];
 				child->dynamic_ready_time = curr_time;
-				cout<<"child pred 0 - "<<child_core->id<<endl;
-				cout<<"child core front -- "<<child_core->static_tasks_assigned.front();
 				if(child_core->static_tasks_assigned.front()==child){
 					child->dynamic_process_start_time = curr_time;
 					processing_queue.push(child);
@@ -767,38 +755,6 @@ bool isFeasible(task* i, task* j){
 	return iToj;
 }
 
-// void simulatedAnnealingAlgo(Multicore* multicore, double deadline){
-	
-// 	greedyTimeAlgo(multicore,deadline);
-
-// 	for(auto core : multicore->cores){
-// 		vector<task*> next_state;
-// 		vector<task*> curr_state = core->tasks;
-// 		int si = curr_state.size();
-
-// 		int base_index = rand()%(si-1 + 0 - 1) + 0;
-// 		int movable_index = rand()%(si-1 + 0 - 1) + 0;
-
-// 		while(base_index == movable_index && !isFeasible(curr_state[base_index],curr_state[movable_index])){
-// 			movable_index = rand()%(si-1 + 0 - 1) + 0;
-// 		} 
-
-// 		next_state = curr_state;
-
-// 		task* tempTask = next_state[base_index];
-// 		next_state[base_index] = next_state[movable_index];
-// 		next_state[movable_index] = tempTask;
-
-
-// 		double w = systemReliability(multicore);
-// 		core->task = next_state;
-// 		double w_new = systemReliability(multicore);
-// 		if(w_new > w){
-// 			core->task = next_state;
-// 		}
-// 	}
-
-// }
 
 //**********recovery assigning algos end**************************************************************************************************88
  
@@ -854,11 +810,18 @@ vector<string> line_to_words(string str)
 int executor(string config_filename){
 
 	ifstream input_file;
-	input_file.open(config_filename);
+	string config_filepath = "./INPUTS/" + config_filename + ".txt";
+	input_file.open(config_filepath);
 
-	string output_filename = "./OUTPUTS/output_" + config_filename;
+	string output_filename = "./OUTPUTS/output_" + config_filename + ".txt";
 	ofstream output_file;
 	output_file.open(output_filename);
+
+	string csv_output_filename = "./OUTPUTS/output_" + config_filename + ".csv";
+	ofstream csv_output_file;
+	csv_output_file.open(csv_output_filename);
+
+	csv_output_file<<"Name of file,No of recoveries,Rsys_static,PoF_static,Rsys_dynamic,PoF_dynamic\n";
 
 	string line="";
 	int i=1;
@@ -873,6 +836,9 @@ int executor(string config_filename){
 
 		output_file<<" CONFIG NUMBER : "<<i<<" \n";
 		output_file<<line<<endl;
+
+		csv_output_file<<"Config Number,"<<i<<"\n";
+		csv_output_file<<NO_OF_CORES<<","<<WC_ADJ_FACTOR<<","<<SHORTEST_JOB_FIRST<<","<<RO<<"\n";
 
 		string benchmark_folder = "./BenchmarkDagsTXT/";
 
@@ -904,7 +870,7 @@ int executor(string config_filename){
 			for(auto node:dag->nodes){
 				total_time+=node->worst_case_time;
 			}
-			dag->deadline = 2.25*(total_time/(double)NO_OF_CORES);
+			dag->deadline = 1.75*(total_time/(double)NO_OF_CORES);
 			DEADLINE = dag->deadline;
 			
 			//use algo
@@ -914,16 +880,21 @@ int executor(string config_filename){
 
 			assign_freq(new_dag,2);
 
-			double Rsys = systemReliability(new_dag);
-			double PoF = 1 - Rsys;
+			double Rsys_static = systemReliability(new_dag);
+			double PoF_static = 1 - Rsys_static;
+
+			scheduleDynamic(new_dag);
+			double Rsys_dynamic = systemReliability_dynamic(new_dag);
+			double PoF_dynamic = 1 - Rsys_dynamic;
 
 			//print reliability
-			 output_file<<filename<<"\t"<<no_of_recoveries<<"\t"<<Rsys<<"\t"<<PoF<<endl;
-
+			 output_file<<setw(7)<<filename<<setw(8)<<no_of_recoveries<<"\t"<<Rsys_static<<"\t"<<Rsys_dynamic<<"\t"<<PoF_dynamic<<endl;
+			 csv_output_file<<filename<<","<<no_of_recoveries<<","<<Rsys_static<<","<<PoF_static<<","<<Rsys_dynamic<<","<<PoF_dynamic<<"\n";
 		}
 
 		i++;
 		output_file<<"---------------------------------------------------------\n\n";
+		csv_output_file<<"\n\n";
 	}
 
 	output_file.close();
@@ -939,17 +910,6 @@ int main(){
 	executor(config_filename);
 	
 	// applying algo to assign recoveries :
-
-
-
-
-	//create a list of file paths here
-	//for each file we create a DAG
-	//run that DAG for each algo and get results
-	// print the name and result from each algo
-	ofstream output_file;
-	output_file.open("output.txt");
-	// output_file.open();
 
 	vector<string> files;
 	files.push_back("./BenchmarkDagsTXT/Montage_25.txt");
@@ -977,9 +937,15 @@ int main(){
 		DEADLINE = dag->deadline;
 		cout<<DEADLINE<<endl;
 		//use algo
+<<<<<<< HEAD
 		NUMBER_OF_RECOVERIES = numberOfRecoveriesStatic(dag);
 		cout<<" HERE "<<NUMBER_OF_RECOVERIES;
 		cout<<" HERE END"<<endl;
+=======
+		int no_of_recoveries = numberOfRecoveriesStatic(dag);
+		cout<<" NO OF RECOVERIES "<<no_of_recoveries;
+		cout<<endl;
+>>>>>>> d36ec73c2508e2662cc66e30897c763aa60b463a
 		// dag->displayDAG();
 		DAG* new_dag = getNewDAG(dag);
 		// new_dag->displayDAG();
@@ -1022,17 +988,16 @@ int main(){
 			cout<<endl;
 		}
 
-		double Rsys = systemReliability(new_dag);
+		double Rsys = systemReliability_dynamic(new_dag);
 
 
 		//print reliability
+		cout<<hasMTTF(multicore)<<"this is mttf check\n";
 		 cout<<filepath<<"\t"<<Rsys<<"\t"<<endl;
-		 output_file << Rsys<<endl;
 
 
 	}
 
-	output_file.close();
 	return 0;
 
 }
@@ -1064,5 +1029,36 @@ rsys = systemReliability(multicore);
 cout<<"System reliability : "<<rsys<<" \n";
 cout<<"Is within deadline : "<<isWithinDeadline(multicore,dag->deadline)<<" \n";
 
+// void simulatedAnnealingAlgo(Multicore* multicore, double deadline){
+	
+// 	greedyTimeAlgo(multicore,deadline);
 
+// 	for(auto core : multicore->cores){
+// 		vector<task*> next_state;
+// 		vector<task*> curr_state = core->tasks;
+// 		int si = curr_state.size();
+
+// 		int base_index = rand()%(si-1 + 0 - 1) + 0;
+// 		int movable_index = rand()%(si-1 + 0 - 1) + 0;
+
+// 		while(base_index == movable_index && !isFeasible(curr_state[base_index],curr_state[movable_index])){
+// 			movable_index = rand()%(si-1 + 0 - 1) + 0;
+// 		} 
+
+// 		next_state = curr_state;
+
+// 		task* tempTask = next_state[base_index];
+// 		next_state[base_index] = next_state[movable_index];
+// 		next_state[movable_index] = tempTask;
+
+
+// 		double w = systemReliability(multicore);
+// 		core->task = next_state;
+// 		double w_new = systemReliability(multicore);
+// 		if(w_new > w){
+// 			core->task = next_state;
+// 		}
+// 	}
+
+// }
 */
