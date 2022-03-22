@@ -79,6 +79,8 @@ bool SHORTEST_JOB_FIRST = true;
 
 double RO = 1e-6;
 
+int NUMBER_OF_RECOVERIES = 0;
+
 Multicore* multicore;
 
 
@@ -369,7 +371,7 @@ void longestDistVexit(DAG* dag)
 // 1) duplicated nodes for tasks with recovery as per criteria
 // 2) added dummy nodes vexit and ventry
 // 3) dist from vexit is updated by calling a function
-DAG* getNewDAG(DAG* dag, int number_of_recoveries){
+DAG* getNewDAG(DAG* dag){
 	DAG* new_dag = new DAG();
 	new_dag->inputDAG(dag->filesname, NO_OF_CORES);
 
@@ -377,7 +379,7 @@ DAG* getNewDAG(DAG* dag, int number_of_recoveries){
 	
 	vector<task*> sorted_nodes = new_dag->nodes;
 	sort(sorted_nodes.begin(), sorted_nodes.end(),compWorstCaseTime);
-	for (int i = 0; i < number_of_recoveries; i++){
+	for (int i = 0; i < NUMBER_OF_RECOVERIES; i++){
 		task* node = sorted_nodes[i];
 		node->recovery_assigned=true;
 		task* new_node = new task(); //successor - prede.. done
@@ -557,13 +559,25 @@ double dynamicScaleFrequency(task* node){
 	double time_available = node->end_time - node->dynamic_process_start_time;
 	double freq_factor = 1.0 ;
 	double max_freq = multicore->freq_levels[multicore->freq_levels.size()-1];
-	for(int i = multicore->freq_levels.size()-2; i>=0; i--){
-		if(node->worst_case_time * (max_freq/multicore->freq_levels[i]) <= time_available 
-		&& systemLifetimeReliability(multicore) < LIFETIME_THRESHOLD){
-			freq_factor = max_freq/multicore->freq_levels[i];
-			node->freq_assigned = 0.99 / freq_factor;
+	// if number of recoveries is equal to the number of nodes
+	if(NUMBER_OF_RECOVERIES == NO_OF_TASKS){
+		for(int i=0; i<=multicore->freq_levels.size()-2; i++){
+			if(node->worst_case_time * (max_freq/multicore->freq_levels[i]) <= time_available){
+				freq_factor = max_freq/multicore->freq_levels[i];
+				node->freq_assigned = 0.99 / freq_factor;
+				break;
+			}
 		}
-		else break;
+	}
+	else{
+		for(int i = multicore->freq_levels.size()-2; i>=0; i--){
+			if(node->worst_case_time * (max_freq/multicore->freq_levels[i]) <= time_available 
+			&& systemLifetimeReliability(multicore) < LIFETIME_THRESHOLD){
+				freq_factor = max_freq/multicore->freq_levels[i];
+				node->freq_assigned = 0.99 / freq_factor;
+			}
+			else break;
+		}	
 	}
 	node->freq_assigned = 0.99 / freq_factor;
 	return freq_factor;
@@ -963,11 +977,11 @@ int main(){
 		DEADLINE = dag->deadline;
 		cout<<DEADLINE<<endl;
 		//use algo
-		int no_of_recoveries = numberOfRecoveriesStatic(dag);
-		cout<<" HERE "<<no_of_recoveries;
+		NUMBER_OF_RECOVERIES = numberOfRecoveriesStatic(dag);
+		cout<<" HERE "<<NUMBER_OF_RECOVERIES;
 		cout<<" HERE END"<<endl;
 		// dag->displayDAG();
-		DAG* new_dag = getNewDAG(dag,no_of_recoveries);
+		DAG* new_dag = getNewDAG(dag);
 		// new_dag->displayDAG();
 		assign_freq(new_dag,1);
 		bool a = canScheduleStatic(new_dag);
