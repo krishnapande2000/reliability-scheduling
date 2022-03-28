@@ -905,6 +905,7 @@ int main(){
 
 	for(auto filepath : files){
 		DAG* dag = new DAG();
+		NO_OF_CORES = 10;
 		dag->inputDAG(filepath,NO_OF_CORES);
 		NO_OF_TASKS = dag->nodes.size();
 
@@ -919,7 +920,7 @@ int main(){
 		for(auto node:dag->nodes){
 			total_time+=node->worst_case_time;
 		}
-		dag->deadline = 2.25*(total_time/(double)NO_OF_CORES);
+		dag->deadline = 1.75*(total_time/(double)NO_OF_CORES);
 		DEADLINE = dag->deadline;
 		cout<<DEADLINE<<endl;
 		//use algo
