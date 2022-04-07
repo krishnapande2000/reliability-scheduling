@@ -174,6 +174,7 @@ void DAG::inputDAG(string filepath, int no_of_cores){
 		double runtime;
 		fin >> id >> runtime;
 		nodes[id]->worst_case_time = runtime;
+		nodes[id]->execution_time = runtime;
 	}
 
 	int src,dst;

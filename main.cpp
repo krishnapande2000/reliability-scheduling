@@ -219,6 +219,34 @@ double systemReliability_dynamic(DAG* dag){
 	return Rsys;
 }
 
+double lifetime_f_value(double freq, double time){
+	double value = e^(-1*3.83*freq*freq*time*time);
+	return value;
+}
+
+double lifetimeReliability_approx(task* t){
+
+	double ni = NO_OF_INTERVALS;
+	double exec_time = t->execution_time;
+	double len_of_interval = exec_time/ni;
+	double freq = t->freq_assigned;
+
+	double sum = 1 + lifetime_f_value(freq,exec_time);
+	for(int k=1;k<ni;k++){
+		double xk = k*(len_of_interval);
+		if(i%2){
+			sum += 4*lifetime_f_value(freq,xk);
+		}
+		else{
+			sum+= 2*lifetime_f_value(freq,xk);
+		}
+	}
+
+	double result = (len_of_interval*sum)/3;
+	return result;
+
+}
+
 double lifetimeReliability(task* t,Core* c){
 	double constant_a = 38.92;
 	double freq = t->freq_assigned;
@@ -233,23 +261,17 @@ double lifetimeReliability(task* t,Core* c){
 double systemLifetimeReliability(Multicore* multicore){
 	double MTTFsys = DBL_MAX;
 	for(auto core : multicore->cores){
+		double MTTFi = 0;
 		for(auto task : core->tasks){
-			double MTTFi = lifetimeReliability(task,core);
-			MTTFsys = min(MTTFsys,MTTFi);
+			MTTFi += lifetimeReliability_approx(task);
+			cout<<"task id "<<task->id<<" freq "<<task->freq_assigned<<" time "<<task->worst_case_time<<" mttf val "<<MTTFi<<"\n";
 		}
+		MTTFsys = min(MTTFsys,MTTFi);
 	}
 	return MTTFsys;
 }
 
-double power(task* t, Core* c){
 
-	double a = 1;
-	double C = 2;
-	double V = 220;
-	double freq_assigned = t->freq_assigned*(2.25); //this is Ghz manage variables as per that
-	double p = a*C*V*V*freq_assigned;
-	return p;
-}
 //**********calc end**************************************************************************************************88
 
 
@@ -905,9 +927,9 @@ int executor(string config_filename){
 
 int main(){
 
-	string config_filename;
-	cin>>config_filename;
-	executor(config_filename);
+	// string config_filename;
+	// cin>>config_filename;
+	// executor(config_filename);
 	
 	// applying algo to assign recoveries :
 
@@ -938,15 +960,10 @@ int main(){
 		DEADLINE = dag->deadline;
 		cout<<DEADLINE<<endl;
 		//use algo
-<<<<<<< HEAD
-		NUMBER_OF_RECOVERIES = numberOfRecoveriesStatic(dag);
-		cout<<" HERE "<<NUMBER_OF_RECOVERIES;
-		cout<<" HERE END"<<endl;
-=======
+
 		int no_of_recoveries = numberOfRecoveriesStatic(dag);
 		cout<<" NO OF RECOVERIES "<<no_of_recoveries;
 		cout<<endl;
->>>>>>> d36ec73c2508e2662cc66e30897c763aa60b463a
 		// dag->displayDAG();
 		DAG* new_dag = getNewDAG(dag);
 		// new_dag->displayDAG();
@@ -964,6 +981,9 @@ int main(){
 			cout<<endl;
 		}
 
+		cout<<"MTTF calcccc \n";
+		double MTTFsys = systemLifetimeReliability(multicore);
+		cout<<"MTTF sys is "<<MTTFsys<<endl;
 		cout<<endl<<endl;
 
 		// for(Core* core: multicore->cores){
