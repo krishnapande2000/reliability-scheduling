@@ -81,6 +81,8 @@ double RO = 1e-6;
 
 int NUMBER_OF_RECOVERIES = 0;
 
+int NO_OF_INTERVALS = 1000;
+
 Multicore* multicore;
 
 
@@ -220,10 +222,12 @@ double systemReliability_dynamic(DAG* dag){
 }
 
 double lifetime_f_value(double freq, double time){
-	double value = e^(-1*3.83*freq*freq*time*time);
+	// double power_of_e = 
+	double value = exp((-1)*3.83*time*time*freq*freq*1e-3);
 	return value;
 }
 
+//calculating integral using simpsons rule
 double lifetimeReliability_approx(task* t){
 
 	double ni = NO_OF_INTERVALS;
@@ -234,7 +238,7 @@ double lifetimeReliability_approx(task* t){
 	double sum = 1 + lifetime_f_value(freq,exec_time);
 	for(int k=1;k<ni;k++){
 		double xk = k*(len_of_interval);
-		if(i%2){
+		if(k%2){
 			sum += 4*lifetime_f_value(freq,xk);
 		}
 		else{
@@ -247,22 +251,13 @@ double lifetimeReliability_approx(task* t){
 
 }
 
-double lifetimeReliability(task* t,Core* c){
-	double constant_a = 38.92;
-	double freq = t->freq_assigned;
-	double MTTF = constant_a / (freq-0.1); //freq in ghz please (10^9) 
-	//TO-DO(niyatic): multiply by root Ao.
-
-	// cout<<"freq "<<freq<<" mttf: "<<MTTF<<" \n";
-	return MTTF;
-	
-}
 
 double systemLifetimeReliability(Multicore* multicore){
 	double MTTFsys = DBL_MAX;
 	for(auto core : multicore->cores){
 		double MTTFi = 0;
 		for(auto task : core->tasks){
+			if(task->worst_case_time == 0) continue; //to skip vexit and ventry nodes in calc
 			MTTFi += lifetimeReliability_approx(task);
 			cout<<"task id "<<task->id<<" freq "<<task->freq_assigned<<" time "<<task->worst_case_time<<" mttf val "<<MTTFi<<"\n";
 		}
@@ -386,7 +381,7 @@ void longestDistVexit(DAG* dag)
 // 1) duplicated nodes for tasks with recovery as per criteria
 // 2) added dummy nodes vexit and ventry
 // 3) dist from vexit is updated by calling a function
-DAG* getNewDAG(DAG* dag){
+DAG* getNewDAG(DAG* dag, int no_of_recoveries){
 	DAG* new_dag = new DAG();
 	new_dag->inputDAG(dag->filesname, NO_OF_CORES);
 
@@ -394,7 +389,7 @@ DAG* getNewDAG(DAG* dag){
 	
 	vector<task*> sorted_nodes = new_dag->nodes;
 	sort(sorted_nodes.begin(), sorted_nodes.end(),compWorstCaseTime);
-	for (int i = 0; i < NUMBER_OF_RECOVERIES; i++){
+	for (int i = 0; i < no_of_recoveries; i++){
 		task* node = sorted_nodes[i];
 		node->recovery_assigned=true;
 		task* new_node = new task(); //successor - prede.. done
@@ -595,6 +590,20 @@ double dynamicScaleFrequency(task* node){
 	}
 	node->freq_assigned = 0.99 / freq_factor;
 	return freq_factor;
+}
+
+double dynamicScaleFrequency_new(task* node){
+	double original_freq_assigned = node->freq_assigned;
+	double freq_factor = 1;
+	for(int i = multicore->freq_levels.size()-1; i>=0; i--){
+			freq_factor = max_freq/multicore->freq_levels[i];
+			node->freq_assigned = 0.99 / freq_factor
+			if(systemLifetimeReliability(multicore) < LIFETIME_THRESHOLD){
+				node->freq_assigned = original_freq_assigned;
+			}
+			else break;
+		}	
+	return 1/freq_factor;
 }
 
 void executeTask(task* node, double freq_factor){
@@ -897,6 +906,7 @@ int executor(string config_filename){
 			
 			//use algo
 			int no_of_recoveries = numberOfRecoveriesStatic(dag);
+		    NUMBER_OF_RECOVERIES = no_of_recoveries;
 			DAG* new_dag = getNewDAG(dag,no_of_recoveries);
 		    canScheduleStatic(new_dag);
 
@@ -963,9 +973,10 @@ int main(){
 
 		int no_of_recoveries = numberOfRecoveriesStatic(dag);
 		cout<<" NO OF RECOVERIES "<<no_of_recoveries;
+		NUMBER_OF_RECOVERIES = no_of_recoveries;
 		cout<<endl;
 		// dag->displayDAG();
-		DAG* new_dag = getNewDAG(dag);
+		DAG* new_dag = getNewDAG(dag, no_of_recoveries);
 		// new_dag->displayDAG();
 		assign_freq(new_dag,1);
 		bool a = canScheduleStatic(new_dag);
