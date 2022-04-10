@@ -59,6 +59,7 @@ using namespace std;
 struct Core{
 	Core(){
 		total_time=0;
+		idle_time=0;
 	}
 	int id;
 	double hardware_coefficient;
@@ -69,6 +70,7 @@ struct Core{
 	double ro;
 
 	double total_time;
+	double idle_time;
 
 	vector<task*> tasks;
 	double free_at;

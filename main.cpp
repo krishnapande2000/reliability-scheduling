@@ -236,16 +236,23 @@ double lifetimeReliability_approx(task* t){
 	double freq = t->freq_assigned;
 
 	double sum = 1 + lifetime_f_value(freq,exec_time);
+	double idle_constant = 0;
+
 	for(int k=1;k<ni;k++){
+
 		double xk = k*(len_of_interval);
+		double term;
 		if(k%2){
-			sum += 4*lifetime_f_value(freq,xk);
+			term = 4*lifetime_f_value(freq,xk);
 		}
 		else{
-			sum+= 2*lifetime_f_value(freq,xk);
+			term = 2*lifetime_f_value(freq,xk);
 		}
+		idle_constant = max(term,idle_constant);
+		sum+=term;
 	}
 
+	sum +=  idle_constant*(task->core_assigned->idle_time);
 	double result = (len_of_interval*sum)/3;
 	return result;
 
@@ -459,6 +466,21 @@ bool canScheduleStatic(DAG* node_graph){
 		core->free_at = 0;
 	}
 
+	//put frequency assignment here
+	// try to already give max for each that is mixed levels like 4 and 5 as well
+	// so that it doesnt happen that a greater frequency was possible within deadline
+	// but we assigned 4 and said it wasnt possible to schedule it at all with all constraints
+	// (we can calculate mttf beforehand also cause we have homogenous cores)
+
+	for(int i=multicore->freq_levels.size()-1;i>=0;i--){
+
+		//
+		for(task* node : node_graph->nodes){
+			node->freq_assigned = freq_levels[i];
+		}
+
+	}
+
 	priority_queue<task*, vector<task*>,CompEndTime> processing_queue;
 	priority_queue<task*, vector<task*>,CompVexitDistance> ready_queue;
 
@@ -612,7 +634,9 @@ void executeTask(task* node, double freq_factor){
 	if(factor>0.9) {
 		factor -= (double)(rand() % 4) / 10.0 - 0.1;
 	}
+	double original_exec_time = node->execution_time;
 	node->execution_time = node->worst_case_time * factor * freq_factor;
+	multicore->cores[node->core_assigned]->idle_time = original_exec_time - node->execution_time;
 	node->dynamic_process_end_time = node->dynamic_process_start_time + node->execution_time;
 }
 
