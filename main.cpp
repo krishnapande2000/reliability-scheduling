@@ -454,11 +454,7 @@ DAG* getNewDAG(DAG* dag, int no_of_recoveries){
 	return new_dag;
 }
 
-
-//checks if given DAG can be scheduled within deadline
-// assigns tasks to cores if possible
-// also assigns start and end time for each task
-bool canScheduleStatic(DAG* node_graph){
+void scheduleWithoutDeadline(DAG* node_graph){
 	multicore->clear_cores();
 	vector<Core*> free_cores;
 	for(auto core:multicore->cores){
@@ -466,20 +462,107 @@ bool canScheduleStatic(DAG* node_graph){
 		core->free_at = 0;
 	}
 
-	//put frequency assignment here
-	// try to already give max for each that is mixed levels like 4 and 5 as well
-	// so that it doesnt happen that a greater frequency was possible within deadline
-	// but we assigned 4 and said it wasnt possible to schedule it at all with all constraints
-	// (we can calculate mttf beforehand also cause we have homogenous cores)
 
-	for(int i=multicore->freq_levels.size()-1;i>=0;i--){
+	priority_queue<task*, vector<task*>,CompEndTime> processing_queue;
+	priority_queue<task*, vector<task*>,CompVexitDistance> ready_queue;
 
-		//
-		for(task* node : node_graph->nodes){
-			node->freq_assigned = freq_levels[i];
+	for(task* node : node_graph->nodes){
+		node->remaining_predecessors = node->predecessors.size();
+		node->core_assigned = 0;
+	}
+	// cout<<free_cores.size()<<endl;
+	free_cores.back()->tasks.push_back(node_graph->nodes[node_graph->ventry_id]);
+	node_graph->nodes[node_graph->ventry_id]->core_assigned = free_cores.back()->id;
+	free_cores.pop_back();
+
+	// cout<<node_graph->nodes[node_graph->ventry_id]->core_assigned<<" free core size - "<<free_cores.size()<<endl;
+	processing_queue.push(node_graph->nodes[node_graph->ventry_id]);
+
+
+	while (!processing_queue.empty()){
+		task* top_node = processing_queue.top();
+		// cout<<top_node->id<<" * ";
+		processing_queue.pop();
+		double end_time = top_node->end_time;
+		// cout<<"end time -- "<<end_time<<" - ";
+		while(true){
+
+			Core* core_assigned = multicore->cores[top_node->core_assigned];
+			for(task* child : top_node->successors){
+				child->remaining_predecessors --;
+				if(child->remaining_predecessors == 0){
+					child->ready_time = end_time;
+					ready_queue.push(child);
+					// cout<<"in ready q: "<<child->id<<" ";
+				}
+			}
+			
+			core_assigned->free_at = end_time;
+			free_cores.push_back(core_assigned);
+
+			// cout<<endl;
+			// cout<<" ready q size -- "<<ready_queue.size()<<" processing q size -- "<<processing_queue.size()<<endl;
+
+			// if processing queue has same end time for other nodes
+			// remove those nodes too 
+			if(!processing_queue.empty() && processing_queue.top()->end_time == end_time){
+				top_node = processing_queue.top();
+				processing_queue.pop();
+			}
+			else break;
+			
 		}
 
+		// now assigning free cores to ready queue tasks
+		while(!ready_queue.empty()){
+			task* next_node = ready_queue.top();
+			int idx_min_free_at=0;
+			int min_free_at=free_cores[0];
+			for(int i=0;i<free_cores.size();i++){
+				if(free_cores[i]->free_at<min_free_at){
+					min_free_at=free_cores[i]->free_at;
+					idx_min_free_at=i;
+				}
+			}
+			Core* free_core = free_cores[idx_min_free_at];
+			double prob_start_time = max(next_node->ready_time, free_core->free_at);
+			double prob_end_time = prob_start_time + WC_ADJ_FACTOR*(next_node->worst_case_time);
+			next_node->core_assigned = free_core->id;
+			next_node->start_time = prob_start_time;
+			next_node->end_time = prob_end_time;
+			free_core->tasks.push_back(next_node);
+			ready_queue.pop();
+			processing_queue.push(next_node);
+			free_cores.erase(free_cores.begin()+idx_min_free_at);
+			// for(int i=0; i<free_cores.size(); i++){
+			// 	Core* free_core = free_cores[i];
+			// 	double prob_start_time = max(next_node->ready_time, free_core->free_at);
+			// 	double prob_end_time = prob_start_time + WC_ADJ_FACTOR*(next_node->worst_case_time);
+			// 	if(prob_end_time <= DEADLINE) {
+			// 		next_node->core_assigned = free_core->id;
+			// 		next_node->start_time = prob_start_time;
+			// 		next_node->end_time = prob_end_time;
+			// 		free_core->tasks.push_back(next_node);
+			// 		ready_queue.pop();
+			// 		processing_queue.push(next_node);
+			// 		free_cores.erase(free_cores.begin()+i);
+			// 		break;
+			// 	}
+			// 	else if(i==free_cores.size()-1) return false;
+			// }
+			if(free_cores.size() == 0) break;
+		}
 	}
+}
+
+bool scheduleWithDeadline(DAG* node_graph){
+	multicore->clear_cores();
+	vector<Core*> free_cores;
+	for(auto core:multicore->cores){
+		free_cores.push_back(core);
+		core->free_at = 0;
+	}
+
 
 	priority_queue<task*, vector<task*>,CompEndTime> processing_queue;
 	priority_queue<task*, vector<task*>,CompVexitDistance> ready_queue;
@@ -555,6 +638,55 @@ bool canScheduleStatic(DAG* node_graph){
 	}
 	if(!ready_queue.empty()) return false;
 	return true;
+
+}
+
+//checks if given DAG can be scheduled within deadline
+// assigns tasks to cores if possible
+// also assigns start and end time for each task
+bool canScheduleStatic(DAG* node_graph){
+	multicore->clear_cores();
+	vector<Core*> free_cores;
+	for(auto core:multicore->cores){
+		free_cores.push_back(core);
+		core->free_at = 0;
+	}
+
+	// put frequency assignment here
+	// try to already give max for each that is mixed levels like 4 and 5 as well
+	// so that it doesnt happen that a greater frequency was possible within deadline
+	// but we assigned 4 and said it wasnt possible to schedule it at all with all constraints
+	// (we can calculate mttf beforehand also cause we have homogenous cores)
+
+	for(int i=multicore->freq_levels.size()-1;i>=0;i--){
+
+		// assigning all tasks this frequency level
+		for(task* node : node_graph->nodes){
+			node->freq_assigned = freq_levels[i];
+		}
+
+		// schedule - so that every task is assigned to a core 
+		scheduleWithoutDeadline(node_graph);
+		// if threshold does not reach - continue - i.e level down frequency
+		if(systemLifetimeReliability(multicore) < LIFETIME_THRESHOLD) continue;
+		// if threshold reaches - 
+		else {
+			// if deadline matched - return true
+			if(scheduleWithDeadline(node_graph)) return true;
+			if(i == multicore->freq_levels.size()-1) return false;
+			// else try to level up tasks one by one and see if there is a point deadline
+			// and threshold both meet
+			for(task* node : node_graph->nodes){
+				node->freq_assigned = freq_levels[i+1];
+				if(scheduleWithDeadline(node_graph)&&systemLifetimeReliability(multicore)>=LIFETIME_THRESHOLD) return true;
+			}
+		}
+
+	}
+	return false;
+
+	
+				
 
 }
 
