@@ -71,7 +71,7 @@ int NO_OF_TASKS = 50;
 
 double DEADLINE = 0.0;
 
-double LIFETIME_THRESHOLD = 60;
+double LIFETIME_THRESHOLD = 9;
 
 double WC_ADJ_FACTOR = 1;
 
@@ -252,7 +252,7 @@ double lifetimeReliability_approx(task* t){
 		sum+=term;
 	}
 
-	sum +=  idle_constant*(task->core_assigned->idle_time);
+	sum +=  idle_constant*(multicore->cores[t->core_assigned]->idle_time);
 	double result = (len_of_interval*sum)/3;
 	return result;
 
@@ -266,7 +266,7 @@ double systemLifetimeReliability(Multicore* multicore){
 		for(auto task : core->tasks){
 			if(task->worst_case_time == 0) continue; //to skip vexit and ventry nodes in calc
 			MTTFi += lifetimeReliability_approx(task);
-			cout<<"task id "<<task->id<<" freq "<<task->freq_assigned<<" time "<<task->worst_case_time<<" mttf val "<<MTTFi<<"\n";
+			// cout<<"task id "<<task->id<<" freq "<<task->freq_assigned<<" time "<<task->worst_case_time<<" mttf val "<<MTTFi<<"\n";
 		}
 		MTTFsys = min(MTTFsys,MTTFi);
 	}
@@ -517,7 +517,7 @@ void scheduleWithoutDeadline(DAG* node_graph){
 		while(!ready_queue.empty()){
 			task* next_node = ready_queue.top();
 			int idx_min_free_at=0;
-			int min_free_at=free_cores[0];
+			int min_free_at=free_cores[0]->free_at;
 			for(int i=0;i<free_cores.size();i++){
 				if(free_cores[i]->free_at<min_free_at){
 					min_free_at=free_cores[i]->free_at;
@@ -526,7 +526,7 @@ void scheduleWithoutDeadline(DAG* node_graph){
 			}
 			Core* free_core = free_cores[idx_min_free_at];
 			double prob_start_time = max(next_node->ready_time, free_core->free_at);
-			double prob_end_time = prob_start_time + WC_ADJ_FACTOR*(next_node->worst_case_time);
+			double prob_end_time = prob_start_time + WC_ADJ_FACTOR*(next_node->execution_time);
 			next_node->core_assigned = free_core->id;
 			next_node->start_time = prob_start_time;
 			next_node->end_time = prob_end_time;
@@ -620,7 +620,7 @@ bool scheduleWithDeadline(DAG* node_graph){
 			for(int i=0; i<free_cores.size(); i++){
 				Core* free_core = free_cores[i];
 				double prob_start_time = max(next_node->ready_time, free_core->free_at);
-				double prob_end_time = prob_start_time + WC_ADJ_FACTOR*(next_node->worst_case_time);
+				double prob_end_time = prob_start_time + WC_ADJ_FACTOR*(next_node->execution_time);
 				if(prob_end_time <= DEADLINE) {
 					next_node->core_assigned = free_core->id;
 					next_node->start_time = prob_start_time;
@@ -662,7 +662,8 @@ bool canScheduleStatic(DAG* node_graph){
 
 		// assigning all tasks this frequency level
 		for(task* node : node_graph->nodes){
-			node->freq_assigned = freq_levels[i];
+			node->freq_assigned = multicore->freq_levels[i];
+			node->execution_time = node->worst_case_time*(0.99/node->freq_assigned);
 		}
 
 		// schedule - so that every task is assigned to a core 
@@ -677,7 +678,7 @@ bool canScheduleStatic(DAG* node_graph){
 			// else try to level up tasks one by one and see if there is a point deadline
 			// and threshold both meet
 			for(task* node : node_graph->nodes){
-				node->freq_assigned = freq_levels[i+1];
+				node->freq_assigned = multicore->freq_levels[i+1];
 				if(scheduleWithDeadline(node_graph)&&systemLifetimeReliability(multicore)>=LIFETIME_THRESHOLD) return true;
 			}
 		}
@@ -748,10 +749,12 @@ double dynamicScaleFrequency(task* node){
 
 double dynamicScaleFrequency_new(task* node){
 	double original_freq_assigned = node->freq_assigned;
-	double freq_factor = 1;
+	double freq_factor = 1.0;
+	double max_freq = multicore->freq_levels[multicore->freq_levels.size()-1];
+
 	for(int i = multicore->freq_levels.size()-1; i>=0; i--){
 			freq_factor = max_freq/multicore->freq_levels[i];
-			node->freq_assigned = 0.99 / freq_factor
+			node->freq_assigned = 0.99 / freq_factor;
 			if(systemLifetimeReliability(multicore) < LIFETIME_THRESHOLD){
 				node->freq_assigned = original_freq_assigned;
 			}
@@ -810,7 +813,7 @@ void scheduleDynamic(DAG* node_graph){
 				core_top_node->dynamic_process_start_time = curr_time;
 				processing_queue.push(core_top_node);
 				// frequency scale 
-				double freq_factor = dynamicScaleFrequency(core_top_node);
+				double freq_factor = dynamicScaleFrequency_new(core_top_node);
 				executeTask(core_top_node, freq_factor);
 			}
 		}
@@ -824,7 +827,7 @@ void scheduleDynamic(DAG* node_graph){
 					child->dynamic_process_start_time = curr_time;
 					processing_queue.push(child);
 					// frequency scale 
-					double freq_factor = dynamicScaleFrequency(child);
+					double freq_factor = dynamicScaleFrequency_new(child);
 					executeTask(child, freq_factor);
 				}
 			}
@@ -1066,7 +1069,7 @@ int executor(string config_filename){
 			DAG* new_dag = getNewDAG(dag,no_of_recoveries);
 		    canScheduleStatic(new_dag);
 
-			assign_freq(new_dag,2);
+			//assign_freq(new_dag,2);
 
 			double Rsys_static = systemReliability(new_dag);
 			double PoF_static = 1 - Rsys_static;
@@ -1093,9 +1096,9 @@ int executor(string config_filename){
 
 int main(){
 
-	// string config_filename;
-	// cin>>config_filename;
-	// executor(config_filename);
+	string config_filename;
+	cin>>config_filename;
+	executor(config_filename);
 	
 	// applying algo to assign recoveries :
 
@@ -1134,7 +1137,7 @@ int main(){
 		// dag->displayDAG();
 		DAG* new_dag = getNewDAG(dag, no_of_recoveries);
 		// new_dag->displayDAG();
-		assign_freq(new_dag,1);
+		//assign_freq(new_dag,1);
 		bool a = canScheduleStatic(new_dag);
 		cout<<endl<<endl;
 		cout<<"can schedule true or false -- "<<a<<endl;

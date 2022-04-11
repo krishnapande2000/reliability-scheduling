@@ -82,12 +82,12 @@ double aging_rate;
 */
 
 Multicore::Multicore(){
-	freq_levels.push_back(1.0);
-	freq_levels.push_back(1.25);
-	freq_levels.push_back(1.5);
-	freq_levels.push_back(1.75);
-	freq_levels.push_back(2.0);
-	freq_levels.push_back(2.25);
+	freq_levels.push_back(0.44);
+	freq_levels.push_back(0.55);
+	freq_levels.push_back(0.66);
+	freq_levels.push_back(0.77);
+	freq_levels.push_back(0.88);
+	freq_levels.push_back(0.99);
 }
 
 void Multicore::generateCores(int no_of_cores){
